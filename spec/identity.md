@@ -48,6 +48,19 @@ carry it, and so does every record.
 Transcript headers also record the operating system and shell, the facts an
 agent would otherwise assume about where earlier work happened.
 
+## The project
+
+A project's **handle** is `handle` in its `.ai/config.yml` (`ipck`).
+Without one, it is the project directory's name, lowercased, each run of
+characters outside letters, digits and `-` replaced by one `-`, trimmed of
+`-` at either end, and prefixed with `agent-` if it doesn't then start with
+a letter (`siliconcircus.lol` gives `siliconcircus-lol`). The project's
+**address** is `@` plus its handle (`@ipck`): where other projects' agents
+send mail (see [Mail](mail.md)).
+
+Project handles and people's handles are separate: an address names a
+project, and the `@` in an id names a person (`N17@trans`).
+
 ## Ids
 
 Each person numbers their own transcript entries and their own records, so

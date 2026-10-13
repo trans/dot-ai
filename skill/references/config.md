@@ -5,10 +5,9 @@ because Crystal's standard library reads it (it has no TOML). Every key is
 optional, and readers ignore keys they don't know.
 
 ```yaml
-arcana:
-  handle: "@oyl"    # this project's agent on the Arcana bus
-  description: >    # what that agent does, for other agents
-    The agent for Oyl, a ...
+handle: oyl         # this project's handle: other agents write to @oyl
+description: >      # what this project's agent does, for other agents
+  The agent for Oyl, a ...
 mail:
   review: triage    # or "all": every outbound message waits for approval
 transcript:
@@ -23,8 +22,8 @@ users:              # the people working here, by handle
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `arcana.handle` | string | none | The Arcana address of an agent working in this project: `@` plus the project's name by convention (`@oyl`, `@datadungeon`). Agents register and receive mail under it, and send with it as `from`. The Arcana session hooks register it at session start (a handle without the `@` gets one); with none, they fall back to `@` plus the directory name, and an agent asks the user. |
-| `arcana.description` | string | none | One or two sentences on what this project's agent does. The session hooks put it in the agent's Arcana directory listing, so other agents can tell what it is for. `>` folds a multi-line value into one paragraph. |
+| `handle` | string | the directory's name | This project's handle: other projects' agents send mail to `@` plus it (`@oyl`), whatever carries the mail (local delivery, the Arcana bus). Short, lowercase, letters, digits and `-`. Without one, the project directory's name, folded into a handle (`Silicon.Circus` gives `silicon-circus`). |
+| `description` | string | none | One or two sentences on what this project's agent does, for other agents: Arcana's directory listing, an overseer looking over its projects. `>` folds a multi-line value into one paragraph. |
 | `mail.review` | string | `triage` | Which outbound mail waits for the user's approval. `triage`: the lead agent decides per message, sending routine mail to the outbox and holding the rest in drafts. `all`: every message waits in drafts. |
 | `transcript.encrypt` | boolean | `false` | Encrypt committed transcripts on the `ai` branch with git-crypt (GPG mode), on top of redaction. Losing every key loses them, so keep two GPG keys, one offline. |
 | `users.<handle>` | map | none | A person working in this project, by handle (short, lowercase, letters, digits and `-`): `name`; `emails`, every address they commit with; and `aliases`, handles they used before this one (ids under them stay theirs). A person's handle is the entry whose `emails` include their git `user.email`; unregistered, it's their email's local part. Records and transcript entries carry it (`N17@trans`, `E1043@trans`), shown without it to its owner. Each contributor adds their own entry; a handle already registered to someone else's emails is taken. |
@@ -34,8 +33,14 @@ users:              # the people working here, by handle
 The dot-ai spec (the user's `dot.ai` repository, `spec/config.md`) is the
 normative version of this table; keep the two in step.
 
-Quote the handle: YAML reads an unquoted leading `@` as a reserved
-indicator and fails.
+Write the handle without the `@` (`handle: oyl`). Written with it, it must
+be quoted: YAML reads an unquoted leading `@` as a reserved indicator and
+fails.
+
+Two per-person settings that hold across projects live in git config
+instead: `ai.machine`, this machine's name, and `ai.path`, the directories
+to search for projects when delivering mail (multi-valued:
+`git config --global --add ai.path ~/Projects`).
 
 `.ai/config.yml` lives on the `ai` branch. A checkout without the `.ai`
 worktree has no config, which readers treat like an empty one.
@@ -43,11 +48,12 @@ worktree has no config, which readers treat like an empty one.
 ## .ai/arcana.token (not config, not committed)
 
 The Arcana session hooks (`arcana hook`, installed by `arcana setup`)
-create `.ai/arcana.token` on first use: the owner token that proves to
-this machine's bus that the handle's registration is this project's, so
-re-registering it answers "yours" instead of "already registered". It is
-machine-local: `.ai/.gitignore` lists it (see `assets/gitignore`), and the
-code checkout ignores `.ai/` as a whole. Never commit it.
+create `.ai/arcana.token` on first use: the owner token that proves to this
+machine's bus that the registration under the project's address is this
+project's, so re-registering it answers "yours" instead of "already
+registered". It is machine-local: `.ai/.gitignore` lists it (see
+`assets/gitignore`), and the code checkout ignores `.ai/` as a whole. Never
+commit it.
 
 ## Changing the schema
 
@@ -64,25 +70,26 @@ require "yaml"
 struct AiConfig
   include YAML::Serializable
 
-  struct Arcana
-    include YAML::Serializable
-    getter handle : String? = nil
-  end
+  getter handle : String? = nil
+  getter description : String? = nil
 
-  getter arcana : Arcana? = nil
-
-  def self.load(dir = ".ai") : AiConfig
-    path = File.join(dir, "config.yml")
+  def self.load(project_dir = ".") : AiConfig
+    path = File.join(project_dir, ".ai", "config.yml")
     from_yaml(File.exists?(path) ? File.read(path) : "{}")
   end
 
-  def arcana_handle : String?
-    arcana.try(&.handle)
+  # The project's mail address: @ plus its handle, or its directory's name
+  def address(project_dir = ".") : String
+    name = handle.try(&.lchop('@').strip).presence ||
+           File.basename(File.expand_path(project_dir)).downcase.gsub(/[^a-z0-9-]+/, "-").strip('-')
+    name = "agent-#{name}" unless name =~ /\A[a-z]/
+    "@#{name}"
   end
 end
 
-AiConfig.load.arcana_handle # => "@oyl", or nil without a config or key
+AiConfig.load.address # => "@oyl"
 ```
 
-Tested with Crystal 1.21: a full config, one without the key, and a missing
-file give `"@oyl"`, `nil` and `nil`.
+Tested with Crystal 1.21: `handle: oyl` and `handle: "@oyl"` both give
+`"@oyl"`; with no key or no config, a directory `Silicon.Circus` gives
+`"@silicon-circus"` and `2048` gives `"@agent-2048"`.

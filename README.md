@@ -1,6 +1,9 @@
 # dot-ai
 
-*Draft 0.1, 2026-10-13*
+*Draft 0.2, 2026-10-13*. 0.2: mail no longer depends on Arcana. Projects
+are found by searching for `.ai/` directories and mail is delivered as
+files, Arcana being one transport among others; the project's address
+comes from the top-level `handle`, which replaces `arcana.handle`.
 
 A project's `.ai/` directory holds what AI agents working on it need that the
 code and its history don't say: where things stand, decisions in progress,
@@ -17,11 +20,11 @@ reads or writes `.ai/` follows it.
 |---|---|
 | [Layout](spec/layout.md) | Where `.ai/` lives, its directories, what is committed and what stays on the machine, how tools commit |
 | [Config](spec/config.md) | `.ai/config.yml` and this machine's `.var/ai/config.yml` |
-| [Identity](spec/identity.md) | Users, handles, machines, and the ids that hold across them (`N17@trans`, `E1043@trans`) |
+| [Identity](spec/identity.md) | People, machines, projects, and the ids that hold across them (`N17@trans`, `E1043@trans`) |
 | [Transcripts](spec/transcript.md) | The transcript format: files, headers, entries, numbering, reading |
 | [Records](spec/records.md) | Curated records as files: one per version, front matter, removal |
 | [Protection](spec/protection.md) | What is masked and redacted before anything is committed, and encryption |
-| [Mail](spec/mail.md) | Messages between agents: drafts, outbox, sent, inbox |
+| [Mail](spec/mail.md) | Messages between projects' agents: addresses, folders, finding projects, delivery |
 | [Memory](spec/memory.md) | The notes agents keep in `memory/` |
 
 ## Terms
@@ -65,6 +68,12 @@ runs agents and writes their transcripts.
   could replace git-crypt.
 - **A format version.** Transcript headers and record files don't yet say
   which version of this spec they follow.
+- **Two checkouts of one project** on a machine (a second clone to try
+  something in, say) both claim its address, so mail to it isn't
+  delivered. A way to mark the one that receives isn't settled.
+- **Mail across machines without a bus.** Local delivery reaches only this
+  machine. Committing into the recipient repository's `ai` branch would
+  reach any machine with git access to it.
 - **Mail on a public branch.** `mail/sent/` and `mail/inbox/` are committed,
   so on a public repository they are public. Whether they need redaction or
   encryption is open.

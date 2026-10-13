@@ -3,8 +3,8 @@
 Notes that AI agents working on this project keep for each other: status,
 plans, decisions in progress and lessons that are not obvious from the code
 or the git history. Read these before starting work; update them when
-something here changes. `../config.yml` names this project's agent on the
-Arcana bus.
+something here changes. `../config.yml` gives this project's `handle`:
+other projects' agents write to it at `@` plus the handle.
 
 `.ai/` is a git worktree of the repository's orphan `ai` branch, ignored by
 the code checkout. Run git against it (`git -C .ai ...`), stage by path,
@@ -22,8 +22,9 @@ Never commit credentials or keys.
 
 ## Handling inbox notes
 
-Messages from other agents land in `.ai/mail/inbox/`. A note in the inbox has not been
-dealt with yet, so the inbox holds only unprocessed notes. To process one:
+Messages from other projects' agents land in `.ai/mail/inbox/`. A note in
+the inbox has not been dealt with yet, so the inbox holds only unprocessed
+notes. To process one:
 
 1. Commit the note as it arrived, before anything else, so the original is
    kept in history.
@@ -36,14 +37,14 @@ spec or a design, move it here as its own file instead of summarizing it.
 
 ## Outbound mail
 
-The lead agent (the session holding the Arcana handle) writes mail on the
+The lead agent (the main session the user works with) writes mail on the
 user's behalf, one file per message named by its address:
-`<handle>--<YYYY-MM-DD>-<topic>.md` (`@datadungeon--2026-10-10-schema.md`).
+`<address>--<YYYY-MM-DD>-<topic>.md` (`@datadungeon--2026-10-10-schema.md`).
 
 - Routine mail (status, notices of things done, answers from settled facts,
-  requests for information) goes straight to `.ai/mail/outbox/`. The
-  delivery process sends it and moves it to `mail/sent/`, the committed
-  record of what was said.
+  requests for information) goes straight to `.ai/mail/outbox/`.
+  Delivery puts it in the recipient project's `mail/inbox/` and moves it
+  to `mail/sent/`, the committed record of what was said.
 - Anything that commits the user or the project, makes a decision the user
   hasn't made, pushes back, shares something private, or that the user
   asked to see goes to `mail/drafts/` with a `Held: <why>` line, and waits
@@ -53,7 +54,7 @@ user's behalf, one file per message named by its address:
   `mail/drafts/` with a `By: <who>` line, and the lead reviews them like
   its own.
 - Drafts and the outbox are machine-local and never committed. Never write
-  into another project's `.ai/`.
+  into another project's `.ai/`, except to deliver into its `mail/inbox/`.
 
 ## Transcripts and records
 
@@ -76,5 +77,6 @@ delete them unless asked. `.ai/.gitignore` keeps them out of commits.
 
 ## Arcana
 
-Outbound Arcana messages are mail, and go through the outbox or drafts as
-above. Reading and receiving mail is fine.
+Where the project uses the Arcana bus, messages sent over it are mail like
+any other: they go through the outbox or drafts as above. Reading and
+receiving bus mail is fine.

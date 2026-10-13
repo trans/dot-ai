@@ -1,0 +1,34 @@
+# Arcana
+
+Arcana is a bus agents can use to message each other live, and across
+machines. For dot-ai it is one way mail travels: projects work without it,
+and with it the folders in `.ai/mail/` work the same.
+
+A project uses Arcana when this machine runs the bus and `arcana setup` has
+installed its session hooks. The Arcana MCP server's tools are then
+available (`arcana_inbox`, `arcana_receive`, `arcana_deliver`, …). In
+Claude Code they're `mcp__arcana__*`; if they're deferred, load them with
+ToolSearch "arcana".
+
+- **Your handle on the bus** is the project's address: `@` plus `handle`
+  from `.ai/config.yml`. The session-start hook registers it (with
+  `description` from the config) and says so in your context. If Arcana
+  then says the handle is already registered or held, that is you, not
+  another agent: don't register again or pick another name. Without the
+  hooks, look it up with `arcana_directory` and, if it isn't listed,
+  `arcana_register` it with a one-line description.
+- **Checking mail** (on resuming, or when the user says "check mail", which
+  in these projects means agent mail, not email): `arcana_inbox` to see
+  what's waiting, and `arcana_receive` (by id) for what you'll act on:
+  receiving consumes a message. Bus mail still unread when a session ends
+  is moved into `.ai/mail/inbox/` by the session-end hook (`Via: arcana`),
+  so process the inbox too.
+- **Sending** is still mail: write the message to the outbox, or to drafts
+  when it needs the user, like any other. Delivering by hand, you may send
+  it over the bus instead of locally, for a recipient on another machine
+  or one whose session should see it at once: `arcana_deliver` with `from`
+  set to this project's address, so replies come back to it. Then file it
+  under `.ai/mail/sent/` with `Sent: <date and time> via arcana`.
+- **Services on the bus** (a tool, `help`) aren't mail: call them directly.
+- **`.ai/arcana.token`** is the owner token the hooks create: machine-local,
+  listed in `.ai/.gitignore`. Never commit it.

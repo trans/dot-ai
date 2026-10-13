@@ -1,5 +1,5 @@
 # .ai/.gitignore — see the dot-ai skill
-# Machine-local: the Arcana owner token
+# Machine-local: Arcana's owner token, if the project uses Arcana
 arcana.token
 # The user's files for the work at hand: never committed
 intake/*

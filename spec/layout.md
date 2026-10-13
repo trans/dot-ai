@@ -21,11 +21,24 @@ applies to either arrangement. `git -C .ai remote -v` tells them apart.
 A tool must treat `.ai/` as present only when it is a worktree or repository
 of its own: `git -C .ai rev-parse --show-toplevel` names `.ai/` itself. A
 plain `.ai/` directory inside the code checkout (an older arrangement, its
-notes committed with the code) gets no transcripts or records.
+notes committed with the code) gets no transcripts or records; notes and
+mail work in it all the same.
 
 The branch is as visible as the repository. On a public repository anyone
 can read it, which is why everything committed is protected first (see
 [Protection](protection.md)).
+
+## Projects inside projects
+
+A project may sit inside another: a meta-project whose agent oversees the
+projects below it (`c0/` holding `c0/c0-cr/`, each with its own `.ai/`).
+Each is a project of its own, with its own `.ai/`, handle and mail. Only
+real nesting counts: a symbolic link to a project elsewhere doesn't make it
+part of the directory holding the link. The project an agent works in is
+the nearest directory, at or above where it works, that holds `.ai/`.
+
+An overseer may read the `.ai/` of the projects below it (their status,
+their notes). It writes to them only by mail.
 
 ## The directories
 
@@ -33,7 +46,7 @@ can read it, which is why everything committed is protected first (see
 .ai/
   .gitignore     keeps the machine-local files below out of commits
   config.yml     settings for agents and tools (Config)
-  arcana.token   the Arcana hooks' owner token                   machine-local
+  arcana.token   Arcana's owner token, if the project uses it    machine-local
   memory/        notes agents keep (Memory)
     README.md    the index
   mail/          messages between agents (Mail)

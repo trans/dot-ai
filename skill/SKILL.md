@@ -1,6 +1,6 @@
 ---
 name: dot-ai
-description: A project's memory and coordination for AI agents, kept in its .ai/ directory, a git worktree of the project repo's orphan `ai` branch (ignored by the code checkout) - .ai/config.yml (the agent's Arcana handle), notes in .ai/memory indexed by .ai/memory/README.md, mail between agents in .ai/mail (drafts, outbox, sent, inbox), session transcripts in .ai/transcript, and files the user shares in .ai/intake. Use this skill whenever you start or resume work in a repository that has a .ai/ directory; whenever the user says to remember something, make or update a note, record a decision, plan, status or lesson, or asks where things stand; when they say to check mail or message another agent (Arcana); whenever a file shows up in .ai/mail or .ai/intake; when asked to set up .ai/ in a project or move an existing one onto its own branch. Also use it to decide whether a fact belongs in the project's notes, the project's own docs, or your own per-machine memory.
+description: A project's memory and coordination for AI agents, kept in its .ai/ directory, a git worktree of the project repo's orphan `ai` branch (ignored by the code checkout) - .ai/config.yml (the project's handle, its mail address), notes in .ai/memory indexed by .ai/memory/README.md, mail between projects' agents in .ai/mail (drafts, outbox, sent, inbox), session transcripts in .ai/transcript, and files the user shares in .ai/intake. Use this skill whenever you start or resume work in a repository that has a .ai/ directory; whenever the user says to remember something, make or update a note, record a decision, plan, status or lesson, or asks where things stand; when they say to check mail or message another project's agent; whenever a file shows up in .ai/mail or .ai/intake; when asked to set up .ai/ in a project or move an existing one onto its own branch. Also use it to decide whether a fact belongs in the project's notes, the project's own docs, or your own per-machine memory.
 ---
 
 # .ai/: project memory and coordination for agents
@@ -8,8 +8,7 @@ description: A project's memory and coordination for AI agents, kept in its .ai/
 A `.ai/` directory holds what AI agents working on a project need that the
 code and git history don't say: where things stand, agreed plans, decisions
 in progress and their reasons, lessons that cost something to learn, mail
-between agents, session transcripts, and who this project's agent is on the
-Arcana bus.
+between projects' agents, and session transcripts.
 
 `.ai/` lives on the project repository's **`ai` branch**, an orphan branch
 that shares no history with the code, checked out into `.ai/` as a git
@@ -40,18 +39,18 @@ agents' working space.
 
 ```
 .ai/                a worktree of the repo's `ai` branch
-  .gitignore        ignores arcana.token and the contents of mail/drafts, mail/outbox and intake/
-  config.yml        settings agents and tools read: arcana.handle, arcana.description
-  arcana.token      owner token the Arcana hooks create; machine-local, never committed
+  .gitignore        ignores the contents of mail/drafts, mail/outbox and intake/, and arcana.token
+  config.yml        settings agents and tools read: handle, description, mail.review, ...
+  arcana.token      Arcana's owner token, if the project uses Arcana; machine-local, never committed
   memory/
     README.md       the index: one row per note, plus the conventions
     <topic>.md      one note per topic: handoff.md, release.md, ...
     <reference>     material kept whole: a spec, a design, a patch
   mail/
     drafts/         outbound messages waiting for review: the lead's, or the user's; machine-local
-    outbox/         outbound messages cleared to go; the delivery process sends them; machine-local
+    outbox/         outbound messages cleared to go, until delivered; machine-local
     sent/           every message sent, committed: the record of what was said
-    inbox/          messages from other agents, not yet processed
+    inbox/          messages from other projects' agents, not yet processed
   transcript/       session transcripts, written by agent runtimes (e.g. Copious)
   records/          curated records (notes, summaries, memories), one file each, by user
   intake/           files the user shares for the work at hand; never committed
@@ -75,46 +74,37 @@ inside it are relative to `.ai/` (`memory/release.md`, `mail/inbox/<file>`).
 3. Look in `.ai/mail/`: process the inbox, and if you are the lead, review
    drafts from helpers and tell the user about drafts waiting for them (all
    below). Look in `.ai/intake/` for files the user left for you.
-4. If the config names an Arcana handle, check your mail (below).
+4. If the project uses Arcana (its tools are available, or a session hook
+   said it registered you), check the bus too: see `references/arcana.md`.
 5. Treat notes as true when written, not necessarily now. Before acting on
    one that names a function, flag, file or commit, check the code or
    `git log`. When a note turns out wrong, fix it.
 
-## Arcana
+## Other projects
 
-Arcana is the bus agents use to message each other, through the Arcana
-MCP server's tools (`arcana_inbox`, `arcana_receive`, `arcana_deliver`, …;
-in Claude Code they're `mcp__arcana__*`, and if they're deferred, load them
-with ToolSearch "arcana"). Your address is `arcana.handle` from
-`.ai/config.yml`, by convention `@` plus the project's name (`@oyl`). Use
-it as given, never a variant. If the config has none, ask the user,
-suggesting `@<project>`, and add it to the config.
+A project's address is `@` plus `handle` from its `.ai/config.yml`
+(`handle: oyl` gives `@oyl`), or, without one, `@` plus its directory's
+name. Use addresses as given, never a variant. If this project's config
+has no `handle`, suggest one to the user and add it.
 
-- **Registration:** where `arcana setup` has installed the session hooks,
-  the session-start hook registers your handle (with `arcana.description`
-  from the config) and says so in your context. If Arcana then says your
-  handle is already registered or held, that is you, not another agent:
-  don't register again or pick another name. Without the hooks, look the
-  handle up with `arcana_directory` and, if it isn't listed,
-  `arcana_register` it with a name and a one-line description.
-- **Checking mail** (on resuming, or when the user says "check mail", which
-  in these projects means Arcana, not email): `arcana_inbox` to see what's
-  waiting, and `arcana_receive` (by id) for what you'll act on: receiving
-  consumes a message. Mail still unread when a session ends is moved into
-  `.ai/mail/inbox/` by the session-end hook, so process the inbox too.
-- **Sending** is mail (below): the lead agent writes each message to the
-  outbox, or to drafts when it needs the user's approval; helpers write to
-  drafts for the lead. Mail goes out with `from` set to the project's
-  handle, so replies come back to it. Calls to services on the bus (a
-  tool, `help`) aren't mail.
+Projects are found by searching for `.ai/` directories: under the
+directories `git config --get-all --type=path ai.path` lists, or, without
+any, under the outermost project enclosing this one (this project's parent
+directory, if none encloses it). Look below projects too, since a project
+may sit inside another (an overseer that keeps track of the projects below
+it), but don't follow symbolic links: each project is found once, where it
+really is.
+
+You may read another project's `.ai/` (its status, its notes): that's how
+an overseer keeps track. Write to it only by mail.
 
 ## Mail
 
-The lead agent (the session holding the project's Arcana handle) writes
-mail on the user's behalf. For each message it decides one thing: does this
-need the user's approval?
+The lead agent (the main session the user works with here; subagents and
+other sessions are helpers) writes mail on the user's behalf. For each
+message it decides one thing: does this need the user's approval?
 
-- **No:** put it in `.ai/mail/outbox/`. The delivery process sends it.
+- **No:** put it in `.ai/mail/outbox/`, and have it delivered (below).
 - **Yes:** put it in `.ai/mail/drafts/` with a first line `Held: <why>`,
   and tell the user. Once they approve, move it to the outbox; if they turn
   it down, delete it.
@@ -146,34 +136,47 @@ information. When unsure, hold. Under `mail.review: all` in
 `.ai/config.yml`, everything is held.
 
 **The files.** One message per file, addressed by its name:
-`<handle>--<YYYY-MM-DD>-<topic>.md`, for example
-`@datadungeon--2026-10-10-schema.md`. The handle is everything before the
+`<address>--<YYYY-MM-DD>-<topic>.md`, for example
+`@datadungeon--2026-10-10-schema.md`. The address is everything before the
 first `--`. The file may start with header lines (`By:`, `Held:`, `Sent:`)
 and a blank line; they are the record, not the message. Everything after
 them is the message exactly as it will be sent. The sender is this
-project's `arcana.handle`.
+project's address.
 
-**Delivery.** A separate delivery process sends what is in the outbox,
-over Arcana or, when the recipient can't be reached, into its inbox. It
-then moves each message to `.ai/mail/sent/`, adding a header line
-`Sent: <date and time> via <arcana|inbox>`. Until a delivery process runs
-on the machine, the lead does this itself. `sent/` is committed and never
-edited: it's the user's record of exactly what was said. When the user
-asks what went out, point them there. Otherwise mention routine mail
-briefly, by count, and held drafts by name.
+**Delivery** takes each message in the outbox to its recipient and files
+the original under `.ai/mail/sent/`. If a delivery tool runs on this
+machine, leave it to the tool. Otherwise the lead delivers by hand:
+
+1. Find the recipient's project (Other projects, above). If it isn't
+   found, is found twice, or has no `.ai/mail/inbox/`, leave the message in
+   the outbox and tell the user why.
+2. Write the message into the recipient's `.ai/mail/inbox/` as an inbox
+   file (Receiving, below) with `Via: local`. Its id is the first 8 hex
+   digits of the SHA-256 of this project's address, the outbound file's
+   name and the message, joined by newlines.
+3. Add `Sent: <date and time> via local` to the original's header lines
+   and move it to `.ai/mail/sent/`.
+
+With Arcana, the bus can carry the message instead (`references/arcana.md`).
+`sent/` is committed and never edited: it's the user's record of exactly
+what was said. When the user asks what went out, point them there.
+Otherwise mention routine mail briefly, by count, and held drafts by name.
 
 **Machine-local:** drafts and the outbox aren't committed. Pushed, the same
 message could go out twice, once from each machine.
 
-**Never write into another project's `.ai/`.** Its inbox is that agent's
-workspace; the delivery process puts mail there.
+**Never write into another project's `.ai/`** except to deliver into its
+`mail/inbox/`.
 
-**Receiving.** Mail that didn't come live arrives in `.ai/mail/inbox/`:
-unread mail the session-end hook saved, and messages delivery processes
-brought from other agents' outboxes. Inbox files are named by the sender
+**Receiving.** Mail arrives in `.ai/mail/inbox/`: delivered from other
+projects' outboxes, or, with Arcana, bus mail still unread when a session
+ended. Inbox files are named by the sender and the time of delivery
 (`@datadungeon--2026-10-10-140322-a1b2c3d4.md`) and start with header lines
 (`From:`, `To:`, `Sent:`, `Subject:`, `Id:`, `Via:`), a blank line, then the
 message. Anything the sender attached beyond text follows as a JSON block.
+A file whose name starts with `.` is a delivery in progress; leave it.
+When the user says "check mail" (agent mail, not email), look here, and on
+the bus too if the project uses Arcana.
 
 ## Transcripts
 
@@ -227,9 +230,9 @@ unlocked machines, ciphertext everywhere else.
 Belongs: status, plans agreed with the user, decisions and why while they're
 still being worked out, lessons learned the hard way, measurements and how
 to reproduce them, open issues with enough detail to pick up later, the
-project's Arcana peers. Doesn't: what the code or git history already say,
-settled knowledge that belongs in the project's own docs, and anything only
-the current conversation needs.
+projects this one corresponds with. Doesn't: what the code or git history
+already say, settled knowledge that belongs in the project's own docs, and
+anything only the current conversation needs.
 
 - Update the note that covers the topic instead of adding one. A new topic
   gets a new note and a row in the index, in the same change.
@@ -289,9 +292,9 @@ and other machines push too. Push the branch by name
 
 ## Setting up .ai/ in a project
 
-1. Ask the user for the Arcana handle (suggest `@<project>`), and, if the
-   repository is public, whether transcripts should also be encrypted
-   (`transcript.encrypt`, see Transcripts).
+1. Ask the user for the project's handle (suggest the directory's name),
+   and, if the repository is public, whether transcripts should also be
+   encrypted (`transcript.encrypt`, see Transcripts).
 2. In the code checkout, add `/.ai/` to `.gitignore` and commit it.
 3. Create the branch and its worktree: `git worktree add --orphan -b ai .ai`
    (git 2.42 or later).
@@ -303,7 +306,8 @@ and other machines push too. Push the branch by name
    `mail/inbox/` and `.ai/intake/`. (The `.gitignore` keeps the contents of
    drafts, outbox and intake out of commits, but not their `.gitkeep`.)
 6. Seed memory with what you already know that belongs there (status,
-   decisions in progress, a coordination note with the handle and peers), a
+   decisions in progress, a coordination note with the projects this one
+   corresponds with), a
    note per topic, each indexed.
 7. Commit on the branch, and push it (`git -C .ai push -u origin ai`) if
    the user agrees.
@@ -320,8 +324,9 @@ For a project whose `.ai/` is still committed with the code:
 2. In the code checkout: `git rm -r --cached .ai`, add `/.ai/` to
    `.gitignore`, and commit. The old notes stay in the code's history.
 3. Move the old directory aside and check the branch out:
-   `mv .ai .ai.old && git worktree add .ai ai`. Copy `arcana.token` and
-   anything in `intake/` across from `.ai.old/`; they were never committed.
+   `mv .ai .ai.old && git worktree add .ai ai`. Copy `arcana.token` (if
+   any) and anything in `intake/` across from `.ai.old/`; they were never
+   committed.
 4. On the branch: move `inbox/` to `mail/inbox/` (`git -C .ai mv inbox
    mail/inbox`), add `.gitignore` from `assets/gitignore` and the other
    `mail/` folders with their `.gitkeep`, and commit.
@@ -330,7 +335,7 @@ For a project whose `.ai/` is still committed with the code:
 
 ## The config
 
-`references/config.md` documents `.ai/config.yml`: today `arcana.handle`,
-`arcana.description`, `mail.review`, `transcript.encrypt` and
-`transcript.redaction`, and how a tool (in Crystal, say) reads the file.
+`references/config.md` documents `.ai/config.yml`: `handle`,
+`description`, `mail.review`, `transcript.encrypt`, `transcript.redaction`
+and `users`, and how a tool (in Crystal, say) reads the file.
 Tools read it too, so add keys only by documenting them there first.

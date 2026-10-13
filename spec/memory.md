@@ -5,7 +5,7 @@
 [Records](records.md)). They hold what isn't in the code or its history:
 where things stand, plans agreed with the user, decisions in progress and
 their reasons, lessons that cost something to learn, open issues, the
-project's peers on the Arcana bus.
+projects it corresponds with.
 
 - **`memory/README.md` is the index:** a table with one row per note (its
   file and what it holds), and the conventions below, so an agent without

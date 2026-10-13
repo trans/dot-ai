@@ -8,10 +8,9 @@ and commit it, as a change everyone gets; tools read it and never rewrite
 it, so its comments survive.
 
 ```yaml
-arcana:
-  handle: "@oyl"      # this project's agent on the Arcana bus
-  description: >      # what that agent does, for other agents
-    The agent for Oyl, a ...
+handle: oyl           # the project's handle: its agents' mail address is @oyl
+description: >        # what the project's agent does, for other agents
+  The agent for Oyl, a ...
 mail:
   review: triage      # or "all": every outbound message waits for approval
 transcript:
@@ -27,8 +26,8 @@ copious:              # one tool's own settings, under its name
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `arcana.handle` | string | none | The project agent's address on the Arcana bus: `@` plus the project's name by convention (`@oyl`). Agents register and receive mail under it and send with it as `from`. Quote it: YAML reads an unquoted leading `@` as a reserved indicator. |
-| `arcana.description` | string | none | One or two sentences on what the project's agent does, for other agents' directory listings. |
+| `handle` | string | the directory's name | The project's handle (see [Identity](identity.md)): short, lowercase, letters, digits and `-`, starting with a letter. Its agents' mail address is `@` plus it (`@oyl`), whatever carries the mail. It may be written with the `@`, quoted then: YAML reads an unquoted leading `@` as a reserved indicator. |
+| `description` | string | none | One or two sentences on what the project's agent does, for other agents (a directory listing, an overseer's view). |
 | `mail.review` | string | `triage` | Which outbound mail waits for the user (see [Mail](mail.md)). `triage`: the lead agent decides per message. `all`: every message waits. |
 | `transcript.redaction` | string | `standard` | What the AI pass removes before transcripts are committed: `standard` or `strict` (see [Protection](protection.md)). A tool that doesn't know the level given must use the strictest it knows. |
 | `transcript.encrypt` | boolean | `false` | Also encrypt committed transcripts with git-crypt (see [Protection](protection.md)). |
@@ -43,20 +42,20 @@ also read them from here, the machine's value winning where both set a key.
 Tools may write this file (`ipck config set` does); people shouldn't need to
 keep comments in it.
 
-Project-wide keys (`arcana`, `transcript`, `users`, `mail`) are read only
-from `.ai/config.yml`: they are agreements between everyone working on the
-project, not one machine's choice.
+Project-wide keys (`handle`, `description`, `mail`, `transcript`, `users`)
+are read only from `.ai/config.yml`: they are agreements between everyone
+working on the project, not one machine's choice.
 
 Per-person settings that hold across projects belong in git config, not
 here: the machine's name (`ai.machine`, see [Identity](identity.md)), and
 the person's own name and email.
 
-## `.ai/arcana.token`
+## Transports' own files
 
-Not config: the owner token the Arcana session hooks create on first use, to
-prove to this machine's bus that the handle's registration is this
-project's. Machine-local, listed in the branch's `.gitignore`. Never commit
-it.
+A mail transport may keep machine-local files in `.ai/`, listed in the
+branch's `.gitignore`. Arcana's session hooks keep `.ai/arcana.token`, the
+owner token proving to this machine's bus that the registration under the
+project's address is this project's. Never commit them.
 
 ## Changing the schema
 
