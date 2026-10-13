@@ -32,9 +32,9 @@ repository's own branch. `git -C .ai remote -v` shows which arrangement a
 project uses.
 
 What anyone working on the code should know (settled design, conventions,
-how to build) belongs in the project's own docs (README, `CLAUDE.md`, a
-docs or design directory) in the code repo. `.ai/` is the agents' working
-space.
+how to build) belongs in the project's own docs (README, `CLAUDE.md` or
+`AGENTS.md`, a docs or design directory) in the code repo. `.ai/` is the
+agents' working space.
 
 ## Layout
 
@@ -82,12 +82,13 @@ inside it are relative to `.ai/` (`memory/release.md`, `mail/inbox/<file>`).
 
 ## Arcana
 
-Arcana is the bus agents use to message each other, through the
-`mcp__arcana__*` tools; if they're deferred, load them with ToolSearch
-("arcana"). Your address is `arcana.handle` from `.ai/config.yml`, by
-convention `@` plus the project's name (`@oyl`). Use it as given, never a
-variant. If the config has none, ask the user, suggesting `@<project>`, and
-add it to the config.
+Arcana is the bus agents use to message each other, through the Arcana
+MCP server's tools (`arcana_inbox`, `arcana_receive`, `arcana_deliver`, …;
+in Claude Code they're `mcp__arcana__*`, and if they're deferred, load them
+with ToolSearch "arcana"). Your address is `arcana.handle` from
+`.ai/config.yml`, by convention `@` plus the project's name (`@oyl`). Use
+it as given, never a variant. If the config has none, ask the user,
+suggesting `@<project>`, and add it to the config.
 
 - **Registration:** where `arcana setup` has installed the session hooks,
   the session-start hook registers your handle (with `arcana.description`
