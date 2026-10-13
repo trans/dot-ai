@@ -37,9 +37,10 @@ runs agents and writes their transcripts.
 - **The dot-ai skill** (`skill/`) tells an agent how to work with `.ai/`
   day to day (when to read notes, how to triage mail). This spec is what
   the skill's conventions rest on, and a change to one goes into the other
-  in the same commit. Install it by copying, not linking, so it doesn't
-  depend on where this repository is checked out:
-  `cp -r skill/. ~/.claude/skills/dot-ai/`.
+  in the same commit. `just install` copies it to Claude Code's skills
+  directory (a copy, not a link, so it doesn't depend on where this
+  repository is checked out); `just diff` shows how the installed copy
+  differs.
 - **Copious** is the first runtime to implement the transcript, record and
   protection parts. Its own canon covers how it does so (numbering, the
   writer, curation, the index).
