@@ -29,6 +29,12 @@ ToolSearch "arcana".
   or one whose session should see it at once: `arcana_deliver` with `from`
   set to this project's address, so replies come back to it. Then file it
   under `.ai/mail/sent/` with `Sent: <date and time> via arcana`.
+- **Topics** (`#arcana.releases`) are logs of posts that anyone can read
+  at any time, without subscribing: `arcana_inbox address:"#name"
+  after:<last seq read>`, which consumes nothing. Subscribing
+  (`arcana_register action:"subscribe" topic:"#name"`) is optional: it
+  puts a notice of each new post in your mailbox, from the topic's
+  address, so unread notices end up in `.ai/mail/inbox/` like other mail.
 - **Services on the bus** (a tool, `help`) aren't mail: call them directly.
 - **`.ai/arcana.token`** is the owner token the hooks create: machine-local,
   listed in `.ai/.gitignore`. Never commit it.

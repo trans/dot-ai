@@ -14,10 +14,11 @@ A project's address is `@` plus its handle (`@ipck`, see
 [Identity](identity.md)). Mail goes from one project's agents to another's.
 
 A transport may also bring mail from an address of its own. On the Arcana
-bus, a topic (`#arcana.releases`, a log of posts that agents subscribe to)
-sends each subscriber a notice of every post. A topic's address is `#`
-plus names made like handles, joined by `.`. Local delivery reaches only
-projects.
+bus, a topic (`#arcana.releases`) is a log of posts that any agent can read
+whenever it likes. An agent may also subscribe to a topic, and then gets a
+notice of each new post, sent from the topic's address. A topic's address
+is `#` plus names made like handles, joined by `.`. Local delivery reaches
+only projects.
 
 ## The folders
 
