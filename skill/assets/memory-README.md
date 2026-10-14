@@ -83,5 +83,9 @@ ever committed.
 ## Arcana
 
 Where the project uses the Arcana bus, messages sent over it are mail like
-any other: they go through the outbox or drafts as above. Reading and
-receiving bus mail is fine.
+any other: they go through the outbox or drafts as above, and are filed
+under `mail/sent/`. A message received off the bus is written to
+`mail/inbox/` at once and handled like any other, so every message between
+projects is recorded, whichever way it went. A topic (`#name`) isn't mail:
+the bus keeps its log. A notice of a post in one is read and deleted,
+never filed.

@@ -105,6 +105,11 @@ an overseer keeps track. Write to it only by mail.
 
 ## Mail
 
+Mail is a message from one project's address to another's, however it
+travels: both sides keep it, committed, the sender under `sent/` and the
+recipient under `received/`, so no message between projects goes
+unrecorded. Arcana topics aren't mail (`references/arcana.md`).
+
 The lead agent (the main session the user works with here; subagents and
 other sessions are helpers) writes mail on the user's behalf. For each
 message it decides one thing: does this need the user's approval?
@@ -182,11 +187,14 @@ machine. Mail that arrives is committed once it's read, under
 
 **Receiving.** Mail arrives in `.ai/mail/inbox/`: delivered from other
 projects' outboxes, or, with Arcana, bus mail still unread when a session
-ended. Inbox files are named by the time the message was sent, the sender,
-the topic and the message's id (`20261010-182051Z-@oyl--schema-a1b2c3d4.md`).
-A sender starting with `#` is an Arcana topic, a log of posts anyone can
-read at any time; this project subscribed to it, so it sends a notice of
-each new post (`20261014-021714Z-#arcana.releases--post-3-a1b2c3d4.md`).
+ended. A message you take off the bus yourself goes there too, at once
+(`references/arcana.md`). Inbox files are named by the time the message
+was sent, the sender, the topic and the message's id
+(`20261010-182051Z-@oyl--schema-a1b2c3d4.md`). A sender starting with `#`
+is an Arcana topic, a log of posts anyone can read at any time; this
+project subscribed to it, so it sends a notice of each new post
+(`20261014-021714Z-#arcana.releases--post-3-a1b2c3d4.md`). A notice isn't
+mail (Processing the inbox, below).
 Inbox files start with header lines (`From:`, `To:`, `Sent:`, `Subject:`,
 `Id:`, `Via:`), a blank line, then the message. Anything the sender
 attached beyond text follows as a JSON block. A file whose name starts with
@@ -287,6 +295,10 @@ the order they're listed (oldest first), and for each one:
 said, and with `sent/` it lists the whole correspondence in order. In a
 public repo, a message with private details is summarized and then deleted
 instead of filed, so the original is never committed.
+
+A notice from a topic (a sender starting with `#`) isn't mail and is never
+filed: read the post it points to if it bears on the work, take what
+matters into the notes, and delete the notice. The topic keeps its own log.
 
 ## Intake and outtake
 

@@ -79,6 +79,9 @@ runs agents and writes their transcripts.
   machine. Committing into the recipient repository's `ai` branch would
   reach any machine with git access to it, but the inbox isn't committed,
   so such mail would need a committed folder of its own.
+- **Posting to a topic.** A post goes to the topic's log, not through the
+  outbox, so the review that outbound mail gets doesn't cover it. What an
+  agent may post without asking the user is open.
 - **Mail on a public branch.** `mail/sent/` and `mail/received/` are
   committed, so on a public repository they are public. Whether they need
   redaction or encryption is open.

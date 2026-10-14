@@ -8,17 +8,30 @@ on one machine, delivering is copying a file from one project to another.
 Other transports, such as the Arcana bus, can carry mail further or live,
 and leave the same files behind.
 
+## What is mail
+
+Mail is a message from one project's address to another's. However it
+travels, by local delivery or over a transport such as the Arcana bus, both
+projects keep it: the sender under `sent/` and the recipient under
+`received/`, both committed. No message between projects goes unrecorded.
+
+Not mail:
+
+- **Topics.** On the Arcana bus, a topic (`#arcana.releases`) is a log of
+  posts that any agent can read whenever it likes. The bus keeps the log,
+  so posts aren't copied into `mail/`; agents take what matters from them
+  into their notes. An agent may subscribe to a topic, and then gets a
+  notice of each new post, sent from the topic's address. A notice is
+  read and deleted, never filed (see Inbox files).
+- **Calls to a service** on a transport (a tool, `help`): requests to a
+  service, not messages between projects.
+
 ## Addresses
 
 A project's address is `@` plus its handle (`@ipck`, see
-[Identity](identity.md)). Mail goes from one project's agents to another's.
-
-A transport may also bring mail from an address of its own. On the Arcana
-bus, a topic (`#arcana.releases`) is a log of posts that any agent can read
-whenever it likes. An agent may also subscribe to a topic, and then gets a
-notice of each new post, sent from the topic's address. A topic's address
-is `#` plus names made like handles, joined by `.`. Local delivery reaches
-only projects.
+[Identity](identity.md)). A topic's address is `#` plus names made like
+handles, joined by `.` (`#arcana.releases`). Local delivery reaches only
+projects.
 
 ## The folders
 
@@ -163,6 +176,12 @@ the sender files it under `sent/` with `via <transport>`, and the recipient
 ends up with an inbox file (Arcana's session hooks write one for each bus
 message still unread when a session ends).
 
+A message an agent takes off a transport itself while its session runs
+(Arcana's `arcana_receive`, which removes it from the bus) gets the same
+inbox file: the agent writes it to `mail/inbox/` at once, named and headed
+as the transport's own inbox files are, before acting on it, so a session
+that stops can't lose it. Then it is processed like any other.
+
 ## Inbox files
 
 Named by the sender and the time it was sent (File names, above): for local
@@ -192,6 +211,11 @@ An inbox file has not been dealt with yet. Processing one:
 `received/` is never edited: it's the record of exactly what other projects
 said. In a public repository, a message with private details is summarized
 and deleted instead of filed, so the original is never committed.
+
+A notice from a topic (its sender starts with `#`) isn't mail, and isn't
+filed: read the post it points to if it bears on the work, take what
+matters into the notes, and delete the notice. The topic's log is its
+record.
 
 ## Noticing mail
 

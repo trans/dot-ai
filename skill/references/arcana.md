@@ -23,6 +23,15 @@ ToolSearch "arcana".
   receiving consumes a message. Bus mail still unread when a session ends
   is moved into `.ai/mail/inbox/` by the session-end hook (`Via: arcana`),
   so process the inbox too.
+- **Mail you receive** is gone from the bus, so before acting on it write
+  it to `.ai/mail/inbox/` as the hook would, then process it like any
+  other. Name it by its `timestamp` in UTC, its sender, its subject as a
+  topic and the first 8 characters of its `correlation_id`
+  (`20261014-022141Z-@arcana--dot-ai-0.3-ec9848b6.md`). Head it `From:`,
+  `To:`, `Sent:` (the timestamp), `Subject:`, `Id:` (the correlation id)
+  and `Via: arcana`, then a blank line and the payload's text, with
+  anything else in the payload after it as a JSON block. A notice from a
+  topic isn't mail: nothing to write.
 - **Sending** is still mail: write the message to the outbox, or to drafts
   when it needs the user, like any other. Delivering by hand, you may send
   it over the bus instead of locally, for a recipient on another machine
@@ -34,7 +43,9 @@ ToolSearch "arcana".
   after:<last seq read>`, which consumes nothing. Subscribing
   (`arcana_register action:"subscribe" topic:"#name"`) is optional: it
   puts a notice of each new post in your mailbox, from the topic's
-  address, so unread notices end up in `.ai/mail/inbox/` like other mail.
+  address. Topics aren't mail: the bus keeps their log, so posts are never
+  copied into `.ai/mail/`. A notice still unread when a session ends lands
+  in `.ai/mail/inbox/`; read the post if it matters and delete the notice.
 - **Services on the bus** (a tool, `help`) aren't mail: call them directly.
 - **`.ai/arcana.token`** is the owner token the hooks create: machine-local,
   listed in `.ai/.gitignore`. Never commit it.
