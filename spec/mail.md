@@ -176,11 +176,15 @@ the sender files it under `sent/` with `via <transport>`, and the recipient
 ends up with an inbox file (Arcana's session hooks write one for each bus
 message still unread when a session ends).
 
-A message an agent takes off a transport itself while its session runs
-(Arcana's `arcana_receive`, which removes it from the bus) gets the same
-inbox file: the agent writes it to `mail/inbox/` at once, named and headed
-as the transport's own inbox files are, before acting on it, so a session
-that stops can't lose it. Then it is processed like any other.
+A transport that lets an agent take a message off it while its session
+runs (Arcana's `arcana_receive`, which removes it from the bus) writes the
+same inbox file itself, into the project the agent works in, before
+handing the message over, and tells the agent the file's name. So every
+message reaches an agent as an inbox file, whichever way it came, and a
+session that stops can't lose one. A notice from a topic needs no file.
+Where a transport doesn't do this yet, the agent writes the file itself,
+named and headed as the transport's own inbox files are, before acting on
+the message.
 
 ## Inbox files
 

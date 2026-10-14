@@ -187,7 +187,7 @@ machine. Mail that arrives is committed once it's read, under
 
 **Receiving.** Mail arrives in `.ai/mail/inbox/`: delivered from other
 projects' outboxes, or, with Arcana, bus mail still unread when a session
-ended. A message you take off the bus yourself goes there too, at once
+ended. A message you take off the bus yourself is put there too
 (`references/arcana.md`). Inbox files are named by the time the message
 was sent, the sender, the topic and the message's id
 (`20261010-182051Z-@oyl--schema-a1b2c3d4.md`). A sender starting with `#`

@@ -23,10 +23,12 @@ ToolSearch "arcana".
   receiving consumes a message. Bus mail still unread when a session ends
   is moved into `.ai/mail/inbox/` by the session-end hook (`Via: arcana`),
   so process the inbox too.
-- **Mail you receive** is gone from the bus, so before acting on it write
-  it to `.ai/mail/inbox/` as the hook would, then process it like any
-  other. Name it by its `timestamp` in UTC, its sender, its subject as a
-  topic and the first 8 characters of its `correlation_id`
+- **Mail you receive** with `arcana_receive` is gone from the bus, so
+  Arcana writes it to `.ai/mail/inbox/` as the hook would and names the
+  file in its result: process that file like any other. If the result
+  names no file (an older Arcana), write it yourself before acting on it.
+  Name it by its `timestamp` in UTC, its sender, its subject as a topic
+  and the first 8 characters of its `correlation_id`
   (`20261014-022141Z-@arcana--dot-ai-0.3-ec9848b6.md`). Head it `From:`,
   `To:`, `Sent:` (the timestamp), `Subject:`, `Id:` (the correlation id)
   and `Via: arcana`, then a blank line and the payload's text, with
