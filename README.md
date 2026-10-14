@@ -1,9 +1,13 @@
 # dot-ai
 
-*Draft 0.2, 2026-10-13*. 0.2: mail no longer depends on Arcana. Projects
-are found by searching for `.ai/` directories and mail is delivered as
-files, Arcana being one transport among others; the project's address
-comes from the top-level `handle`, which replaces `arcana.handle`.
+*Draft 0.3, 2026-10-13*. 0.3: mail files are named time first
+(`20261013-190539Z-@arcana--topic.md`), so folders list in order; the inbox
+is machine-local, and mail once read is filed under `mail/received/`;
+`intake/` and `outtake/` move out of `.ai/` into the project's own
+directory. 0.2: mail no longer depends on Arcana. Projects are found by
+searching for `.ai/` directories and mail is delivered as files, Arcana
+being one transport among others; the project's address comes from the
+top-level `handle`, which replaces `arcana.handle`.
 
 A project's `.ai/` directory holds what AI agents working on it need that the
 code and its history don't say: where things stand, decisions in progress,
@@ -73,7 +77,8 @@ runs agents and writes their transcripts.
   delivered. A way to mark the one that receives isn't settled.
 - **Mail across machines without a bus.** Local delivery reaches only this
   machine. Committing into the recipient repository's `ai` branch would
-  reach any machine with git access to it.
-- **Mail on a public branch.** `mail/sent/` and `mail/inbox/` are committed,
-  so on a public repository they are public. Whether they need redaction or
-  encryption is open.
+  reach any machine with git access to it, but the inbox isn't committed,
+  so such mail would need a committed folder of its own.
+- **Mail on a public branch.** `mail/sent/` and `mail/received/` are
+  committed, so on a public repository they are public. Whether they need
+  redaction or encryption is open.

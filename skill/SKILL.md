@@ -1,6 +1,6 @@
 ---
 name: dot-ai
-description: A project's memory and coordination for AI agents, kept in its .ai/ directory, a git worktree of the project repo's orphan `ai` branch (ignored by the code checkout) - .ai/config.yml (the project's handle, its mail address), notes in .ai/memory indexed by .ai/memory/README.md, mail between projects' agents in .ai/mail (drafts, outbox, sent, inbox), session transcripts in .ai/transcript, and files the user shares in .ai/intake. Use this skill whenever you start or resume work in a repository that has a .ai/ directory; whenever the user says to remember something, make or update a note, record a decision, plan, status or lesson, or asks where things stand; when they say to check mail or message another project's agent; whenever a file shows up in .ai/mail or .ai/intake; when asked to set up .ai/ in a project or move an existing one onto its own branch. Also use it to decide whether a fact belongs in the project's notes, the project's own docs, or your own per-machine memory.
+description: A project's memory and coordination for AI agents, kept in its .ai/ directory, a git worktree of the project repo's orphan `ai` branch (ignored by the code checkout) - .ai/config.yml (the project's handle, its mail address), notes in .ai/memory indexed by .ai/memory/README.md, mail between projects' agents in .ai/mail (drafts, outbox, sent, inbox, received), session transcripts in .ai/transcript, and intake/ and outtake/ for files passed between the user and agents. Use this skill whenever you start or resume work in a repository that has a .ai/ directory; whenever the user says to remember something, make or update a note, record a decision, plan, status or lesson, or asks where things stand; when they say to check mail or message another project's agent; whenever a file shows up in .ai/mail or intake/; when asked to set up .ai/ in a project or move an existing one onto its own branch. Also use it to decide whether a fact belongs in the project's notes, the project's own docs, or your own per-machine memory.
 ---
 
 # .ai/: project memory and coordination for agents
@@ -39,7 +39,7 @@ agents' working space.
 
 ```
 .ai/                a worktree of the repo's `ai` branch
-  .gitignore        ignores the contents of mail/drafts, mail/outbox and intake/, and arcana.token
+  .gitignore        ignores the contents of mail/drafts, mail/outbox and mail/inbox, and arcana.token
   config.yml        settings agents and tools read: handle, description, mail.review, ...
   arcana.token      Arcana's owner token, if the project uses Arcana; machine-local, never committed
   memory/
@@ -50,14 +50,19 @@ agents' working space.
     drafts/         outbound messages waiting for review: the lead's, or the user's; machine-local
     outbox/         outbound messages cleared to go, until delivered; machine-local
     sent/           every message sent, committed: the record of what was said
-    inbox/          messages from other projects' agents, not yet processed
+    inbox/          messages from other projects' agents, not yet read; machine-local
+    received/       every message read, committed: the record of what was heard
   transcript/       session transcripts, written by agent runtimes (e.g. Copious)
   records/          curated records (notes, summaries, memories), one file each, by user
-  intake/           files the user shares for the work at hand; never committed
 ```
 
-Each `mail/` folder and `intake/` hold a `.gitkeep` so they exist in a
-fresh checkout. The code's `.gitignore` lists `/.ai/`.
+Each `mail/` folder holds a `.gitkeep` so it exists in a fresh checkout.
+The code's `.gitignore` lists `/.ai/`.
+
+Next to `.ai/`, in the project's own directory, are two folders for the
+user: `intake/`, where the user shares files with you, and `outtake/`, where
+you (usually the lead) share files with the user (Intake and outtake,
+below). Nothing in them is ever committed.
 
 Run git against the `ai` branch's worktree (`git -C .ai ...`); paths
 inside it are relative to `.ai/` (`memory/release.md`, `mail/inbox/<file>`).
@@ -73,7 +78,7 @@ inside it are relative to `.ai/` (`memory/release.md`, `mail/inbox/<file>`).
    starts. The index exists so you don't have to read every note.
 3. Look in `.ai/mail/`: process the inbox, and if you are the lead, review
    drafts from helpers and tell the user about drafts waiting for them (all
-   below). Look in `.ai/intake/` for files the user left for you.
+   below). Look in `intake/` for files the user left for you.
 4. If the project uses Arcana (its tools are available, or a session hook
    said it registered you), check the bus too: see `references/arcana.md`.
 5. Treat notes as true when written, not necessarily now. Before acting on
@@ -135,10 +140,13 @@ settled (code, docs, notes), acknowledgements, and requests for
 information. When unsure, hold. Under `mail.review: all` in
 `.ai/config.yml`, everything is held.
 
-**The files.** One message per file, addressed by its name:
-`<address>--<YYYY-MM-DD>-<topic>.md`, for example
-`@datadungeon--2026-10-10-schema.md`. The address is everything before the
-first `--`. The file may start with header lines (`By:`, `Held:`, `Sent:`)
+**The files.** One message per file, named by the time you write it and
+the recipient's address: `<time>-<address>--<topic>.md`, for example
+`20261010-180322Z-@datadungeon--schema.md`. The time is UTC
+(`date -u +%Y%m%d-%H%M%SZ`), so every mail folder lists in the order things
+happened; the address runs from the `@` to the first `--`; the topic is a
+few lowercase words joined by `-`. The file keeps its name as it moves
+between folders. It may start with header lines (`By:`, `Held:`, `Sent:`)
 and a blank line; they are the record, not the message. Everything after
 them is the message exactly as it will be sent. The sender is this
 project's address.
@@ -153,25 +161,30 @@ machine, leave it to the tool. Otherwise the lead delivers by hand:
 2. Write the message into the recipient's `.ai/mail/inbox/` as an inbox
    file (Receiving, below) with `Via: local`. Its id is the first 8 hex
    digits of the SHA-256 of this project's address, the outbound file's
-   name and the message, joined by newlines.
+   name and the message, joined by newlines. If a file ending in
+   `-<id>.md` is already in the recipient's `mail/inbox/` or
+   `mail/received/`, it was delivered before: skip to step 3.
 3. Add `Sent: <date and time> via local` to the original's header lines
-   and move it to `.ai/mail/sent/`.
+   and move it, under the same name, to `.ai/mail/sent/`.
 
 With Arcana, the bus can carry the message instead (`references/arcana.md`).
 `sent/` is committed and never edited: it's the user's record of exactly
 what was said. When the user asks what went out, point them there.
 Otherwise mention routine mail briefly, by count, and held drafts by name.
 
-**Machine-local:** drafts and the outbox aren't committed. Pushed, the same
-message could go out twice, once from each machine.
+**Machine-local:** drafts, the outbox and the inbox aren't committed.
+Pushed, a message in the outbox could go out twice, once from each
+machine. Mail that arrives is committed once it's read, under
+`.ai/mail/received/`.
 
 **Never write into another project's `.ai/`** except to deliver into its
 `mail/inbox/`.
 
 **Receiving.** Mail arrives in `.ai/mail/inbox/`: delivered from other
 projects' outboxes, or, with Arcana, bus mail still unread when a session
-ended. Inbox files are named by the sender and the time of delivery
-(`@datadungeon--2026-10-10-140322-a1b2c3d4.md`) and start with header lines
+ended. Inbox files are named by the time the message was sent, the sender,
+the topic and the message's id (`20261010-182051Z-@oyl--schema-a1b2c3d4.md`),
+and start with header lines
 (`From:`, `To:`, `Sent:`, `Subject:`, `Id:`, `Via:`), a blank line, then the
 message. Anything the sender attached beyond text follows as a JSON block.
 A file whose name starts with `.` is a delivery in progress; leave it.
@@ -255,27 +268,39 @@ anything only the current conversation needs.
 
 ## Processing the inbox
 
-Messages from other agents land in `.ai/mail/inbox/`. A note there has not
-been dealt with yet, so the inbox holds only unprocessed notes. For each
-one:
+Messages from other agents land in `.ai/mail/inbox/`. A message there has
+not been dealt with yet, so the inbox holds only unread mail. Read them in
+the order they're listed (oldest first), and for each one:
 
-1. Commit the note as it arrived, before anything else, so the original is
-   kept in history.
-2. Put what matters into the memory notes, in your own words, merged into
-   the right topics rather than pasted in whole.
-3. Delete the note in a following commit, citing the commit that still has
-   it (`git -C .ai show <commit>:mail/inbox/<file>`).
+1. Put what matters into the memory notes, in your own words, merged into
+   the right topics rather than pasted in whole. A message that is
+   reference material to consult again (a spec, a design, a patch) needn't
+   be summarized: cite it from the notes by its path in `mail/received/`.
+2. Move it, unchanged and under the same name, to `.ai/mail/received/`.
+3. Commit the notes and the message together
+   (`git -C .ai add memory/<note>.md mail/received/<file>`).
 
-A note that is reference material to consult again (a spec, a design, a
-patch) moves into memory as its own file, with a row in the index, instead
-of being summarized.
+`received/` is never edited: it's the record of exactly what other projects
+said, and with `sent/` it lists the whole correspondence in order. In a
+public repo, a message with private details is summarized and then deleted
+instead of filed, so the original is never committed.
 
-## Intake
+## Intake and outtake
 
-`.ai/intake/` holds files the user shares for the work at hand. Read them
-when they bear on the task. They are the user's: don't commit, move, edit or
-delete them unless asked. The branch's `.gitignore` keeps them out of
-commits.
+Two folders in the project's own directory, next to `.ai/`, are for
+passing files between the user and the agents, and for nothing else:
+
+- **`intake/`**: files the user shares with you. Read them when they bear
+  on the task. They are the user's: don't move, edit or delete them unless
+  asked.
+- **`outtake/`**: files you share with the user: what they asked you to
+  make, or what you made for them to take (a report, an export, a patch).
+  Tell them it's there. Usually the lead puts files here. Leave them for
+  the user to move or delete.
+
+Each holds a `.gitignore` containing only `*`, so git ignores the folder and
+everything in it. If one is missing when you need it, create it that way
+(`mkdir -p outtake && printf '*\n' > outtake/.gitignore`).
 
 ## Committing
 
@@ -303,8 +328,10 @@ and other machines push too. Push the branch by name
    `assets/memory-README.md`. The README restates these conventions, so
    agents without this skill can follow them too.
 5. Create a `.gitkeep` in `.ai/mail/drafts/`, `mail/outbox/`, `mail/sent/`,
-   `mail/inbox/` and `.ai/intake/`. (The `.gitignore` keeps the contents of
-   drafts, outbox and intake out of commits, but not their `.gitkeep`.)
+   `mail/inbox/` and `mail/received/`. (The `.gitignore` keeps the contents
+   of drafts, outbox and inbox out of commits, but not their `.gitkeep`.)
+   In the project's own directory, create `intake/` and `outtake/`, each
+   with a `.gitignore` containing only `*`.
 6. Seed memory with what you already know that belongs there (status,
    decisions in progress, a coordination note with the projects this one
    corresponds with), a
@@ -325,11 +352,12 @@ For a project whose `.ai/` is still committed with the code:
    `.gitignore`, and commit. The old notes stay in the code's history.
 3. Move the old directory aside and check the branch out:
    `mv .ai .ai.old && git worktree add .ai ai`. Copy `arcana.token` (if
-   any) and anything in `intake/` across from `.ai.old/`; they were never
-   committed.
-4. On the branch: move `inbox/` to `mail/inbox/` (`git -C .ai mv inbox
-   mail/inbox`), add `.gitignore` from `assets/gitignore` and the other
-   `mail/` folders with their `.gitkeep`, and commit.
+   any) across from `.ai.old/`, and move anything in its `intake/` to the
+   project's `intake/` (Intake and outtake); they were never committed.
+4. On the branch: add `.gitignore` from `assets/gitignore` and the `mail/`
+   folders with their `.gitkeep`. Messages in the old `inbox/` haven't been
+   read yet: take them out of git (`git -C .ai rm -r --cached inbox`), move
+   them into `mail/inbox/`, and commit. Then process them as usual.
 5. Push the branch if the user agrees, then remove `.ai.old/` once
    everything is across.
 

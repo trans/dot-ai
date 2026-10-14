@@ -20,26 +20,28 @@ dates and commit hashes. Check the code or `git log` before acting on
 anything here; notes go stale. Machine-specific facts don't belong here.
 Never commit credentials or keys.
 
-## Handling inbox notes
+## Handling mail that arrives
 
-Messages from other projects' agents land in `.ai/mail/inbox/`. A note in
-the inbox has not been dealt with yet, so the inbox holds only unprocessed
-notes. To process one:
+Messages from other projects' agents land in `.ai/mail/inbox/`, which holds
+only mail not yet read and is never committed. Read them oldest first (the
+order they list in), and for each one:
 
-1. Commit the note as it arrived, before anything else, so the original is
-   kept in history.
-2. Put what matters into the memory notes here, in your own words.
-3. Delete the note in a following commit, and cite the commit that still
-   has it (`git -C .ai show <commit>:mail/inbox/<file>`).
+1. Put what matters into the memory notes here, in your own words. A
+   message to consult again, such as a spec or a design, can be cited by
+   its path in `mail/received/` instead of summarized.
+2. Move it, unchanged and under the same name, to `.ai/mail/received/`.
+3. Commit the notes and the message together.
 
-If a note is reference material that will be consulted again, such as a
-spec or a design, move it here as its own file instead of summarizing it.
+`mail/received/` and `mail/sent/` are never edited: they're the record of
+what other projects said and what this one said back.
 
 ## Outbound mail
 
 The lead agent (the main session the user works with) writes mail on the
-user's behalf, one file per message named by its address:
-`<address>--<YYYY-MM-DD>-<topic>.md` (`@datadungeon--2026-10-10-schema.md`).
+user's behalf, one file per message named by the time it was written (UTC)
+and its address: `<time>-<address>--<topic>.md`
+(`20261010-180322Z-@datadungeon--schema.md`). A file keeps its name as it
+moves between folders.
 
 - Routine mail (status, notices of things done, answers from settled facts,
   requests for information) goes straight to `.ai/mail/outbox/`.
@@ -69,11 +71,14 @@ worktree is locked (`cd .ai && git-crypt unlock`).
 `.ai/records/<handle>/` holds the records the runtime curates from them
 (notes, summaries, memories), one file per version, never edited.
 
-## Intake
+## Intake and outtake
 
-The user shares files for the work at hand in `.ai/intake/`. Look there
-when starting a session. The files are the user's: don't commit, move or
-delete them unless asked. `.ai/.gitignore` keeps them out of commits.
+Two folders in the project's own directory, next to `.ai/`, pass files
+between the user and the agents, and nothing else: `intake/` holds files
+the user shares (look there when starting a session; don't move, edit or
+delete them unless asked), and `outtake/` holds files an agent, usually the
+lead, shares with the user. Each holds a `.gitignore` of `*`, so neither is
+ever committed.
 
 ## Arcana
 

@@ -53,26 +53,46 @@ their notes). It writes to them only by mail.
     drafts/      waiting for review                              machine-local
     outbox/      cleared to go                                   machine-local
     sent/        what was sent
-    inbox/       what arrived, not yet processed
+    inbox/       what arrived, not yet read                      machine-local
+    received/    what arrived and was read
   transcript/    session transcripts, protected (Transcripts)
   records/       curated records, one file per version (Records)
-  intake/        files the user shares for the work at hand      machine-local
 ```
 
-Everything not marked machine-local is committed. Each `mail/` folder and
-`intake/` hold a `.gitkeep`, so they exist in a fresh checkout.
+Everything not marked machine-local is committed. Each `mail/` folder holds
+a `.gitkeep`, so it exists in a fresh checkout.
 
 The branch's `.gitignore`:
 
 ```gitignore
 arcana.token
-intake/*
-!intake/.gitkeep
 mail/drafts/*
 !mail/drafts/.gitkeep
 mail/outbox/*
 !mail/outbox/.gitkeep
+mail/inbox/*
+!mail/inbox/.gitkeep
 ```
+
+## The user's folders: `intake/` and `outtake/`
+
+Files passed between the user and the agents sit in the project's own
+directory, next to `.ai/`, where the user can get at them:
+
+```
+intake/      files the user shares with the agents
+outtake/     files an agent (usually the lead) shares with the user
+```
+
+That's all they are for. `intake/` is the user's: agents read what's there
+and don't move, edit or delete it unless asked. An agent puts in `outtake/`
+what it makes for the user to take (a report, an export, a patch), and
+leaves it for the user to move or delete.
+
+Neither is ever committed. Each holds a `.gitignore` containing only `*`,
+which keeps the folder and everything in it out of the code repository
+without an entry in the project's own `.gitignore`. A tool or agent creates
+them when it first needs them.
 
 ## This machine's side: `.var/ai/`
 
@@ -98,16 +118,15 @@ of them.
 |---|---|---|
 | `config.yml` | people, by hand | yes; no tool rewrites it, so its comments survive |
 | `memory/` | agents | yes, the notes are kept current |
-| `mail/` | agents, delivery processes | `sent/` never; the rest move between folders |
+| `mail/` | agents, delivery processes | `sent/` and `received/` never; the rest move between folders |
 | `transcript/` | runtimes | never; files only grow |
 | `records/` | runtimes | never; each change is a new file |
-| `intake/` | the user | not by agents, unless asked |
 
 ## Committing
 
 - **Stage by path, never with `git add -A` or `.`.** Several agents, the
   runtime and the user share the branch, and a sweep would commit someone
-  else's unfinished work (or the user's intake).
+  else's unfinished work.
 - **Commit only what is yours to commit:** a runtime its transcript and
   record files, an agent the notes and mail it wrote. A runtime should use
   `git commit --only <paths>`, so what others have staged stays staged.

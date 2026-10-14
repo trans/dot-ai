@@ -2,7 +2,8 @@
 
 Messages between projects' agents, as files. A message is written to the
 sender's outbox; delivery puts it in the recipient's inbox and files the
-original under `sent/`. All of it works with nothing but the file system:
+original under `sent/`, and the recipient files it under `received/` once
+it has read it. All of it works with nothing but the file system:
 on one machine, delivering is copying a file from one project to another.
 Other transports, such as the Arcana bus, can carry mail further or live,
 and leave the same files behind.
@@ -19,11 +20,17 @@ A project's address is `@` plus its handle (`@ipck`, see
 | `mail/drafts/` | Outbound messages waiting for review: by the lead agent, or by the user | no |
 | `mail/outbox/` | Outbound messages cleared to go | no |
 | `mail/sent/` | Every message sent, never edited: the record of exactly what was said | yes |
-| `mail/inbox/` | Messages that arrived, not yet processed | yes |
+| `mail/inbox/` | Messages that arrived, not yet processed | no |
+| `mail/received/` | Every message processed, never edited: the record of exactly what was heard | yes |
 
-Drafts and the outbox are machine-local: pushed, the same message could go
-out twice, once from each machine. A project receives mail once it has
-`mail/inbox/`; one with `.ai/` but no `mail/` hasn't set up mail.
+Drafts, the outbox and the inbox are machine-local. Pushed, a message in the
+outbox could go out twice, once from each machine. A message that arrives
+is committed once it has been read, under `received/`, so the inbox holds
+only what this machine's agents haven't dealt with yet. A message keeps its
+file name as it moves from folder to folder.
+
+A project receives mail once it has `mail/inbox/`; one with `.ai/` but no
+`mail/` hasn't set up mail.
 
 ## Who writes where
 
@@ -42,12 +49,35 @@ out twice, once from each machine. A project receives mail once it has
   `mail/inbox/`. Reading another project's `.ai/` is fine: an agent
   overseeing several projects keeps track of them that way.
 
+## File names
+
+A message's file name starts with a time, so a folder lists in the order
+things happened, which is the order an agent reads them, and `sent/` and
+`received/` list together as one timeline:
+
+- **Outbound** (drafts, outbox, sent), named by the recipient and the time
+  the message was written: `<time>-<address>--<topic>.md`
+  (`20261010-180322Z-@datadungeon--schema.md`).
+- **Inbound** (inbox, received), named by the sender and the time it was
+  sent: `<time>-<address>--<topic>-<id>.md`
+  (`20261010-182051Z-@oyl--schema-a1b2c3d4.md`), or
+  `<time>-<address>--<id>.md` when it has no topic.
+
+The parts:
+
+- `<time>` is `YYYYMMDD-HHMMSS` in UTC followed by `Z`
+  (`date -u +%Y%m%d-%H%M%SZ`), so names sort the same on every machine and
+  across daylight-saving changes. Header lines give times in full.
+- The address runs from the `@` after the time to the first `--`.
+- `<topic>` is a few lowercase words joined by `-`, digits and `.` allowed
+  (`v0.12.0`). A transport's subject becomes a topic by lowercasing it,
+  turning each run of characters other than `a-z`, `0-9`, `.` and `-` into
+  `-`, trimming `-` from both ends, and cutting it to 50 characters.
+- `<id>` is the message's id (Delivery, below).
+
 ## Outbound files
 
-One message per file, named by its recipient:
-`<address>--<YYYY-MM-DD>-<topic>.md` (`@datadungeon--2026-10-10-schema.md`).
-The recipient is everything before the first `--`. The sender is the
-project's own address.
+One message per file. The sender is the project's own address.
 
 The file may start with header lines and a blank line; they are the record,
 not the message. Everything after them is the message, exactly as it will be
@@ -103,21 +133,20 @@ For each file in the outbox (hidden files and `.gitkeep` aside):
    The same message always has the same id.
 3. **Deliver it:** write it into the recipient's `mail/inbox/` as an inbox
    file (below) with `Via: local`, unless a file ending in `-<id>.md` is
-   already there (an earlier run that stopped before step 4). Write it
-   under a hidden name (a leading `.`) and rename it into place, so no one
-   reads half a message.
+   already in its `mail/inbox/` or `mail/received/` (an earlier run that
+   stopped before step 4). Write it under a hidden name (a leading `.`)
+   and rename it into place, so no one reads half a message.
 4. **File the original:** add `Sent: <date and time> via local` to its
-   header lines and move it to `sent/`.
+   header lines and move it, under the same name, to `sent/`.
 
 Delivery is at least once: a message stays in the outbox until step 4, so
 it's never lost, and a run that stopped between steps 3 and 4 delivers it
-again, which the id check catches unless the recipient has already
-processed the first copy.
+again, which the id check catches.
 
 A delivery tool doesn't commit: the sender's agents commit `sent/`, and the
-recipient's process their inbox (below). A tool that runs agents should
-deliver when a session starts and ends, and an agent that clears a message
-to the outbox should have it delivered then.
+recipient's commit `received/` as they process their inbox (below). A tool
+that runs agents should deliver when a session starts and ends, and an
+agent that clears a message to the outbox should have it delivered then.
 
 **Other transports.** Local delivery reaches the projects on this machine.
 A delivery tool may carry mail further over another transport, such as the
@@ -128,16 +157,16 @@ message still unread when a session ends).
 
 ## Inbox files
 
-Named by the sender: `<address>--<YYYY-MM-DD>-<HHMMSS>-<id>.md`
-(`@datadungeon--2026-10-10-140322-a1b2c3d4.md`), with the date and time of
-delivery. Header lines, a blank line, then the message:
+Named by the sender and the time it was sent (File names, above): for local
+delivery, the time of delivery. Header lines, a blank line, then the
+message:
 
 | Line | Means |
 |---|---|
 | `From:` | The sender's address |
 | `To:` | The recipient's address |
-| `Sent:` | When it was delivered |
-| `Subject:` | The outbound file's topic (its name after the date) |
+| `Sent:` | When it was sent |
+| `Subject:` | The outbound file's topic (its name after the `--`), or the transport's subject |
 | `Id:` | The message's id |
 | `Via:` | The transport that brought it (`local`, `arcana`) |
 
@@ -146,10 +175,15 @@ file in the inbox is a delivery in progress; readers ignore it.
 
 An inbox file has not been dealt with yet. Processing one:
 
-1. Commit it as it arrived, so the original is kept in history.
-2. Take what matters into the project's notes (see [Memory](memory.md)), in
-   the agent's own words.
-3. Delete it in a following commit that cites the commit still holding it.
+1. Take what matters into the project's notes (see [Memory](memory.md)), in
+   the agent's own words. A message to consult again (a spec, a design)
+   can be cited by its path in `received/` instead.
+2. Move it, unchanged and under the same name, to `received/`.
+3. Commit the notes and the message together.
+
+`received/` is never edited: it's the record of exactly what other projects
+said. In a public repository, a message with private details is summarized
+and deleted instead of filed, so the original is never committed.
 
 ## Noticing mail
 
