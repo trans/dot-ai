@@ -13,6 +13,10 @@ install: (install-to claude_skills) (install-to codex_skills)
 diff: (diff-from claude_skills) (diff-from codex_skills)
 
 # Copy skill/ to DIR/dot-ai, unless the tool DIR belongs to isn't installed
+# Bring projects' .ai/ up to draft 0.3; prints what it would do unless given --apply (or --commit)
+upgrade *args:
+    python3 -I scripts/upgrade-to-0.3.py {{args}}
+
 [private]
 install-to dir:
     @if [ -d "{{parent_directory(dir)}}" ]; then \

@@ -91,8 +91,9 @@ leaves it for the user to move or delete.
 
 Neither is ever committed. Each holds a `.gitignore` containing only `*`,
 which keeps the folder and everything in it out of the code repository
-without an entry in the project's own `.gitignore`. A tool or agent creates
-them when it first needs them.
+without an entry in the project's own `.gitignore`. Setting up `.ai/`
+creates both, and an agent that finds one missing when it needs it creates
+it the same way.
 
 ## This machine's side: `.var/ai/`
 
