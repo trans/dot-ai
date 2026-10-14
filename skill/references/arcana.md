@@ -24,9 +24,10 @@ ToolSearch "arcana".
   is moved into `.ai/mail/inbox/` by the session-end hook (`Via: arcana`),
   so process the inbox too.
 - **Mail you receive** with `arcana_receive` is gone from the bus, so
-  Arcana writes it to `.ai/mail/inbox/` as the hook would and names the
-  file in its result: process that file like any other. If the result
-  names no file (an older Arcana), write it yourself before acting on it.
+  Arcana (0.35.4 on) writes it to `.ai/mail/inbox/` as the hook would and
+  gives its path as `inbox_file` in the result: process that file like any
+  other. If the result has no `inbox_file` (an older Arcana, or an
+  `inbox_error`), write it yourself before acting on it.
   Name it by its `timestamp` in UTC, its sender, its subject as a topic
   and the first 8 characters of its `correlation_id`
   (`20261014-022141Z-@arcana--dot-ai-0.3-ec9848b6.md`). Head it `From:`,
