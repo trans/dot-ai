@@ -183,11 +183,13 @@ machine. Mail that arrives is committed once it's read, under
 **Receiving.** Mail arrives in `.ai/mail/inbox/`: delivered from other
 projects' outboxes, or, with Arcana, bus mail still unread when a session
 ended. Inbox files are named by the time the message was sent, the sender,
-the topic and the message's id (`20261010-182051Z-@oyl--schema-a1b2c3d4.md`),
-and start with header lines
-(`From:`, `To:`, `Sent:`, `Subject:`, `Id:`, `Via:`), a blank line, then the
-message. Anything the sender attached beyond text follows as a JSON block.
-A file whose name starts with `.` is a delivery in progress; leave it.
+the topic and the message's id (`20261010-182051Z-@oyl--schema-a1b2c3d4.md`).
+A sender starting with `#` is an Arcana topic you subscribe to, telling
+you of a post (`20261014-021714Z-#arcana.releases--post-3-a1b2c3d4.md`).
+Inbox files start with header lines (`From:`, `To:`, `Sent:`, `Subject:`,
+`Id:`, `Via:`), a blank line, then the message. Anything the sender
+attached beyond text follows as a JSON block. A file whose name starts with
+`.` is a delivery in progress; leave it.
 When the user says "check mail" (agent mail, not email), look here, and on
 the bus too if the project uses Arcana.
 

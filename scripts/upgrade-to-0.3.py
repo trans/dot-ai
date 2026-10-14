@@ -295,7 +295,7 @@ def plan_mail(p):
                 p.notes.append(f"mail/sent/{f.name}: no time in its Sent: line or git, so midnight of its date")
             elif when is None:
                 when = dt.datetime.fromtimestamp(f.stat().st_mtime, dt.timezone.utc)
-            address = m["addr"] if m["addr"].startswith("@") else "@" + m["addr"]
+            address = m["addr"] if m["addr"].startswith(("@", "#")) else "@" + m["addr"]
             name = f"{when:%Y%m%d-%H%M%S}Z-{address}--{m['topic']}.md"
             if (d / name).exists():
                 p.notes.append(f"mail/{folder}/{f.name}: {name} already exists; left as is")

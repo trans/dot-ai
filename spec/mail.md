@@ -13,6 +13,12 @@ and leave the same files behind.
 A project's address is `@` plus its handle (`@ipck`, see
 [Identity](identity.md)). Mail goes from one project's agents to another's.
 
+A transport may also bring mail from an address of its own. On the Arcana
+bus, a topic (`#arcana.releases`, a log of posts that agents subscribe to)
+sends each subscriber a notice of every post. A topic's address is `#`
+plus names made like handles, joined by `.`. Local delivery reaches only
+projects.
+
 ## The folders
 
 | Folder | Holds | Committed |
@@ -68,7 +74,8 @@ The parts:
 - `<time>` is `YYYYMMDD-HHMMSS` in UTC followed by `Z`
   (`date -u +%Y%m%d-%H%M%SZ`), so names sort the same on every machine and
   across daylight-saving changes. Header lines give times in full.
-- The address runs from the `@` after the time to the first `--`.
+- The address starts right after the time, with `@` or `#`, and runs to
+  the first `--` (`20261014-021714Z-#arcana.releases--post-3-a1b2c3d4.md`).
 - `<topic>` is a few lowercase words joined by `-`, digits and `.` allowed
   (`v0.12.0`). A transport's subject becomes a topic by lowercasing it,
   turning each run of characters other than `a-z`, `0-9`, `.` and `-` into
