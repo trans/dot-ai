@@ -1,0 +1,463 @@
+#!/bin/sh
+# dot-ai-mail: delivers .ai/ mail between the projects on this machine, and
+# tells agents when mail is waiting. It follows the Mail spec in the dot.ai
+# repository (spec/mail.md); notes/dot-ai-mail.md there is its design.
+#
+# Needs only POSIX sh and tools: find, sed, awk, date, mv, git (for ai.path),
+# and sha256sum, shasum or openssl.
+
+LC_ALL=C
+export LC_ALL
+VERSION=0.1.0
+MAX_DEPTH=4 # how far below a search root a project may sit
+TAB=$(printf '\t')
+
+usage() {
+  cat <<'EOF'
+dot-ai-mail: deliver .ai/ mail between the projects on this machine
+
+  dot-ai-mail deliver [DIR]    deliver the outbox of the project at or above DIR
+  dot-ai-mail check [DIR]      list its inbox, oldest first (exit 1 when empty)
+  dot-ai-mail find [ADDRESS]   where ADDRESS's project is, or every project found
+  dot-ai-mail hook EVENT [--agent claude|codex]
+                               what the session hooks run: session-start, stop,
+                               session-end (reads the hook's JSON on stdin)
+  dot-ai-mail hooks            print the hook entries for Claude Code and Codex
+  dot-ai-mail version
+EOF
+}
+
+warn() { printf 'dot-ai-mail: %s\n' "$*" >&2; }
+die() {
+  warn "$*"
+  exit 1
+}
+
+TMP=
+LOCK=
+cleanup() {
+  [ -n "$LOCK" ] && rmdir "$LOCK" 2>/dev/null
+  [ -n "$TMP" ] && rm -rf "$TMP"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+tmpdir() {
+  [ -n "$TMP" ] || TMP=$(mktemp -d "${TMPDIR:-/tmp}/dot-ai-mail.XXXXXX") || die "can't make a temporary directory"
+}
+
+# -- Projects and addresses ---------------------------------------------------
+
+# The project at or above DIR: the nearest directory, DIR included, holding .ai/
+project_root() {
+  d=$(cd "$1" 2>/dev/null && pwd -P) || return 1
+  while :; do
+    if [ -d "$d/.ai" ]; then
+      printf '%s\n' "$d"
+      return 0
+    fi
+    [ "$d" = / ] && return 1
+    d=$(dirname "$d")
+  done
+}
+
+# A directory's name made into a handle (spec/identity.md: The project)
+fold_name() {
+  printf '%s\n' "$1" | tr 'A-Z' 'a-z' |
+    sed -e 's/[^a-z0-9-][^a-z0-9-]*/-/g' -e 's/^-*//' -e 's/-*$//' \
+      -e 's/^[^a-z]/agent-&/' -e 's/^$/agent/'
+}
+
+# A project's handle: the top-level `handle:` line of its config, plain or
+# quoted, with or without the @; without one, its directory's name, folded.
+# Fails when the line is there but isn't a handle.
+handle_of() {
+  v=
+  if [ -f "$1/.ai/config.yml" ]; then
+    v=$(sed -n 's/^handle:[[:space:]]*//p' "$1/.ai/config.yml" | head -n 1 | tr -d '\r' |
+      sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//')
+  fi
+  case $v in
+    \"*\") v=${v#\"}; v=${v%\"} ;;
+    \'*\') v=${v#\'}; v=${v%\'} ;;
+  esac
+  v=${v#@}
+  if [ -z "$v" ]; then
+    fold_name "$(basename "$1")"
+    return 0
+  fi
+  case $v in
+    [a-z]*) case $v in *[!a-z0-9-]*) return 1 ;; esac ;;
+    *) return 1 ;;
+  esac
+  printf '%s\n' "$v"
+}
+
+# Where to look for projects: ai.path, else the outermost project enclosing
+# DIR's project, else that project's parent directory
+search_roots() {
+  roots=$(git config --get-all --type=path ai.path 2>/dev/null)
+  if [ -n "$roots" ]; then
+    printf '%s\n' "$roots"
+    return
+  fi
+  outer=
+  d=$(dirname "$1")
+  while :; do
+    [ -d "$d/.ai" ] && outer=$d
+    [ "$d" = / ] && break
+    d=$(dirname "$d")
+  done
+  printf '%s\n' "${outer:-$(dirname "$1")}"
+}
+
+# Every project under the search roots, as "@handle<TAB>dir" lines in $MAP, or
+# "!<TAB>dir" for a config whose handle can't be read. Symbolic links aren't
+# followed, and hidden directories and node_modules/ aren't searched.
+MAP=
+scan() {
+  [ -n "$MAP" ] && return
+  tmpdir
+  MAP=$TMP/map
+  search_roots "$1" | while IFS= read -r root; do
+    [ -n "$root" ] || continue
+    if ! real=$(cd "$root" 2>/dev/null && pwd -P); then
+      warn "ai.path: no such directory: $root"
+      continue
+    fi
+    find "$real" -mindepth 1 -maxdepth $((MAX_DEPTH + 1)) \
+      \( -name .ai -type d -print -prune \) -o \( -name '.*' -o -name node_modules \) -prune 2>/dev/null
+  done | sed 's,/\.ai$,,' | sort -u | while IFS= read -r dir; do
+    if h=$(handle_of "$dir"); then
+      printf '@%s\t%s\n' "$h" "$dir"
+    else
+      printf '!\t%s\n' "$dir"
+    fi
+  done >"$MAP"
+}
+
+# The project with ADDRESS: prints its directory, or fails printing why
+lookup() {
+  found=$(awk -F '\t' -v a="$1" '$1 == a { print $2 }' "$MAP")
+  case $found in
+    '') printf 'no project on this machine has the address %s\n' "$1" ;;
+    *"
+"*) printf 'two projects have the address %s: %s\n' "$1" \
+      "$(printf '%s\n' "$found" | awk 'NR > 1 { printf " and " } { printf "%s", $0 }')" ;;
+    *)
+      printf '%s\n' "$found"
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+# -- Messages ------------------------------------------------------------------
+
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | cut -d ' ' -f 1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 | cut -d ' ' -f 1
+  else
+    openssl dgst -sha256 | sed 's/^.*[= ]//'
+  fi
+}
+
+# "H K" for an outbound file: it has H header lines (leading lines starting
+# `By: `, `Held: ` or `Sent: `), and its message starts on line K, after
+# them and the blank line that ends them.
+layout() {
+  awk '/^(By|Held|Sent): / { h++; next }
+       { b = (h > 0 && $0 == ""); exit }
+       END { print h + 0, h + b + 1 }' "$1"
+}
+
+# Delivers the outbox of the project at ROOT: one line per message
+deliver() {
+  root=$1
+  box=$root/.ai/mail/outbox
+  [ -d "$box" ] || return 0
+  names=$(ls -1 "$box" 2>/dev/null)
+  [ -n "$names" ] || return 0
+
+  if ! sender=$(handle_of "$root"); then
+    printf 'error: %s/.ai/config.yml: its handle line isn'\''t a handle, so nothing was delivered\n' "$root"
+    return 0
+  fi
+  sender=@$sender
+
+  # One delivery per outbox at a time; a lock older than 2 minutes is stale
+  if ! mkdir "$box/.delivering" 2>/dev/null; then
+    [ -n "$(find "$box/.delivering" -prune -mmin +2 2>/dev/null)" ] && rmdir "$box/.delivering" 2>/dev/null
+    mkdir "$box/.delivering" 2>/dev/null || {
+      printf 'busy: another delivery from this outbox is running\n'
+      return 0
+    }
+  fi
+  LOCK=$box/.delivering
+
+  scan "$root"
+  printf '%s\n' "$names" | while IFS= read -r name; do
+    f=$box/$name
+    [ -f "$f" ] || continue
+    case $name in
+      [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]Z-[@#]*.md) ;;
+      *)
+        printf 'left in the outbox: %s: its name isn'\''t <time>-<address>--<topic>.md\n' "$name"
+        continue
+        ;;
+    esac
+    base=${name#????????-???????-}
+    base=${base%.md}
+    case $base in
+      *--*) to=${base%%--*} topic=${base#*--} ;;
+      *) to=$base topic= ;;
+    esac
+    case $to in
+      \#*)
+        printf 'left in the outbox: %s: %s is a topic, and topics aren'\''t mail: post to it on the bus\n' "$name" "$to"
+        continue
+        ;;
+    esac
+    case $to in @[a-z]*) bad= ;; *) bad=1 ;; esac
+    case ${to#@} in *[!a-z0-9-]*) bad=1 ;; esac
+    if [ -n "$bad" ]; then
+      printf 'left in the outbox: %s: %s isn'\''t an address\n' "$name" "$to"
+      continue
+    fi
+    if ! dir=$(lookup "$to"); then
+      printf 'left in the outbox: %s: %s\n' "$name" "$dir"
+      continue
+    fi
+    if [ ! -d "$dir/.ai/mail/inbox" ]; then
+      printf 'left in the outbox: %s: %s (%s) has no .ai/mail/inbox/\n' "$name" "$to" "$dir"
+      continue
+    fi
+
+    set -- $(layout "$f")
+    h=$1 k=$2
+    id=$({
+      printf '%s\n%s\n' "$sender" "$name"
+      tail -n "+$k" "$f"
+    } | sha256 | cut -c 1-8)
+    now=$(date -u '+%Y%m%d-%H%M%SZ %Y-%m-%dT%H:%M:%SZ')
+    stamp=${now% *} iso=${now#* }
+
+    # Deliver, unless an earlier run did and stopped before filing it
+    seen=
+    for x in "$dir/.ai/mail/inbox/"*"-$id.md" "$dir/.ai/mail/received/"*"-$id.md"; do
+      [ -e "$x" ] && seen=1 && break
+    done
+    if [ -z "$seen" ]; then
+      iname=$stamp-$sender--${topic:+$topic-}$id.md
+      tmp=$dir/.ai/mail/inbox/.$iname.$$
+      if ! {
+        printf 'From: %s\nTo: %s\nSent: %s\n' "$sender" "$to" "$iso"
+        [ -n "$topic" ] && printf 'Subject: %s\n' "$topic"
+        printf 'Id: %s\nVia: local\n\n' "$id"
+        tail -n "+$k" "$f"
+      } >"$tmp" 2>/dev/null || ! mv "$tmp" "$dir/.ai/mail/inbox/$iname"; then
+        rm -f "$tmp"
+        printf 'left in the outbox: %s: couldn'\''t write to %s/.ai/mail/inbox/\n' "$name" "$dir"
+        continue
+      fi
+    fi
+
+    # File the original under sent/, with a Sent: line
+    sent=$root/.ai/mail/sent
+    mkdir -p "$sent"
+    if [ ! -e "$sent/$name" ]; then
+      tmp=$sent/.$name.$$
+      if ! {
+        [ "$h" -gt 0 ] && head -n "$h" "$f"
+        printf 'Sent: %s via local\n\n' "$iso"
+        tail -n "+$k" "$f"
+      } >"$tmp" || ! mv "$tmp" "$sent/$name"; then
+        rm -f "$tmp"
+        printf 'error: %s was delivered to %s, but couldn'\''t be filed under .ai/mail/sent/\n' "$name" "$to"
+        continue
+      fi
+    fi
+    rm -f "$f"
+    printf 'delivered: %s to %s\n' "$name" "$to"
+  done
+
+  rmdir "$LOCK" 2>/dev/null
+  LOCK=
+}
+
+# The inbox of the project at ROOT, oldest first
+inbox_list() {
+  [ -d "$1/.ai/mail/inbox" ] && ls -1 "$1/.ai/mail/inbox" 2>/dev/null
+}
+
+# -- Commands --------------------------------------------------------------------
+
+cmd_deliver() {
+  root=$(project_root "${1:-.}") || die "no .ai/ at or above ${1:-.}"
+  tmpdir
+  deliver "$root" >"$TMP/out"
+  if [ -s "$TMP/out" ]; then
+    cat "$TMP/out"
+  else
+    printf 'nothing in the outbox\n'
+  fi
+  ! grep -q -e '^error: ' -e '^left in the outbox: ' "$TMP/out"
+}
+
+cmd_check() {
+  root=$(project_root "${1:-.}") || die "no .ai/ at or above ${1:-.}"
+  [ -d "$root/.ai/mail/inbox" ] || die "$root has no .ai/mail/inbox/"
+  list=$(inbox_list "$root")
+  [ -n "$list" ] || return 1
+  printf '%s\n' "$list"
+}
+
+cmd_find() {
+  here=$(project_root .) || here=$(pwd -P)
+  scan "$here"
+  if [ -z "${1:-}" ]; then
+    awk -F '\t' '$1 != "!" { printf "%-24s %s\n", $1, $2 }' "$MAP"
+    awk -F '\t' '$1 == "!" { print "(can'\''t read the handle) " $2 "/.ai/config.yml" }' "$MAP"
+    awk -F '\t' '$1 != "!" { n[$1]++ } END { for (a in n) if (n[a] > 1) print "two projects have the address " a ": nothing is delivered to it" }' "$MAP"
+    return 0
+  fi
+  if dir=$(lookup "@${1#@}"); then
+    printf '%s\n' "$dir"
+  else
+    die "$dir"
+  fi
+}
+
+# A field of the hook's JSON payload (flat string or boolean fields only)
+json_field() {
+  printf '%s\n' "$PAYLOAD" | tr '\n' ' ' |
+    sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -n 1
+}
+
+# stdin as a JSON string
+json_str() {
+  tr -d '\000-\010\013-\037' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e "s/$TAB/\\\\t/g" |
+    awk 'BEGIN { printf "\"" } NR > 1 { printf "%s", "\\n" } { printf "%s", $0 } END { printf "\"" }'
+}
+
+count() {
+  if [ "$1" -eq 1 ]; then printf '1 %s' "$2"; else printf '%s %ss' "$1" "$2"; fi
+}
+
+cmd_hook() {
+  event=${1:-}
+  shift
+  agent=
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --agent) agent=${2:-} && shift ;;
+    esac
+    shift
+  done
+  case $event in
+    session-start | stop | session-end) ;;
+    *) die "usage: dot-ai-mail hook session-start|stop|session-end [--agent claude|codex]" ;;
+  esac
+  [ -n "$agent" ] || { [ -n "${CLAUDE_PROJECT_DIR:-}" ] && agent=claude || agent=codex; }
+  if [ -t 0 ]; then PAYLOAD=; else PAYLOAD=$(cat); fi
+  session=$(json_field session_id | tr -c 'A-Za-z0-9_.-' '_')
+  cwd=$(json_field cwd)
+  quiet() {
+    [ "$agent" = codex ] && [ "$event" = stop ] && printf '{}\n'
+    exit 0
+  }
+
+  root=$(project_root "${CLAUDE_PROJECT_DIR:-${cwd:-.}}") || quiet
+  [ -d "$root/.ai/mail" ] || quiet
+  tmpdir
+  deliver "$root" >"$TMP/out"
+  [ "$event" = session-end ] && exit 0
+
+  # What this session has been told of, so nothing is announced twice
+  rundir=${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/dot-ai-mail
+  mkdir -p "$rundir" 2>/dev/null && chmod 700 "$rundir" 2>/dev/null
+  told=$rundir/${session:-no-session}
+  touch "$told" 2>/dev/null || told=$TMP/told
+  [ "$event" = session-start ] && find "$rundir" -type f -mtime +7 -exec rm -f {} + 2>/dev/null
+
+  # At session start, everything; at Stop, only what this session hasn't heard
+  : >"$TMP/say"
+  : >"$TMP/new"
+  untold() {
+    [ "$event" = session-start ] || ! grep -qxF "$1" "$told"
+  }
+  sent=$(grep -c '^delivered: ' "$TMP/out")
+  if [ "$sent" -gt 0 ]; then
+    if [ "$sent" -eq 1 ]; then them=it; else them=them; fi
+    printf 'dot-ai-mail delivered %s from the outbox and filed %s under .ai/mail/sent/: commit %s.\n' \
+      "$(count "$sent" message)" "$them" "$them" >>"$TMP/say"
+  fi
+  grep -e '^error: ' -e '^left in the outbox: ' "$TMP/out" | while IFS= read -r line; do
+    untold "out:$line" || continue
+    printf 'out:%s\n' "$line" >>"$told"
+    printf 'dot-ai-mail: %s\n' "$line" >>"$TMP/say"
+  done
+  inbox_list "$root" | while IFS= read -r name; do
+    untold "in:$name" || continue
+    printf 'in:%s\n' "$name" >>"$told"
+    printf '  %s\n' "$name" >>"$TMP/new"
+  done
+  n=$(wc -l <"$TMP/new" | tr -d ' ')
+  if [ "$n" -gt 0 ]; then
+    if [ "$event" = session-start ]; then what="$(count "$n" message) waiting"; else what=$(count "$n" "new message"); fi
+    if [ "$n" -eq 1 ]; then them=it; else them="them, oldest first,"; fi
+    {
+      printf 'You have mail: %s in .ai/mail/inbox/:\n' "$what"
+      cat "$TMP/new"
+      printf 'Process %s as the dot-ai skill says (Processing the inbox).\n' "$them"
+    } >>"$TMP/say"
+  fi
+
+  if [ ! -s "$TMP/say" ]; then quiet; fi
+  if [ "$event" = session-start ]; then
+    printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":%s}}\n' "$(json_str <"$TMP/say")"
+    exit 0
+  fi
+  if [ "$agent" = codex ]; then
+    printf '{"decision":"block","reason":%s}\n' "$(json_str <"$TMP/say")"
+    exit 0
+  fi
+  cat "$TMP/say" >&2 # Claude: exit 2 shows this to the agent and keeps it going
+  exit 2
+}
+
+cmd_hooks() {
+  self=$(command -v dot-ai-mail 2>/dev/null) || self=$0
+  case $self in /*) ;; *) self=$(cd "$(dirname "$self")" && pwd -P)/$(basename "$self") ;; esac
+  cat <<EOF
+Claude Code: merge these into "hooks" in ~/.claude/settings.json
+
+  "SessionStart": [{"hooks": [{"type": "command", "command": "$self hook session-start --agent claude"}]}],
+  "Stop": [{"hooks": [{"type": "command", "command": "$self hook stop --agent claude"}]}],
+  "SessionEnd": [{"hooks": [{"type": "command", "command": "$self hook session-end --agent claude"}]}]
+
+Codex: merge these into "hooks" in ~/.codex/hooks.json
+
+  "SessionStart": [{"matcher": "startup|resume|clear", "hooks": [{"type": "command", "command": "$self hook session-start --agent codex", "timeout": 10}]}],
+  "Stop": [{"hooks": [{"type": "command", "command": "$self hook stop --agent codex", "timeout": 10}]}],
+  "SessionEnd": [{"hooks": [{"type": "command", "command": "$self hook session-end --agent codex", "timeout": 10}]}]
+
+Each event's list may already hold other hooks (Arcana's, say): add these
+beside them.
+EOF
+}
+
+case ${1:-} in
+  deliver) shift && cmd_deliver "$@" ;;
+  check) shift && cmd_check "$@" ;;
+  find) shift && cmd_find "$@" ;;
+  hook) shift && cmd_hook "$@" ;;
+  hooks) cmd_hooks ;;
+  version | --version) printf 'dot-ai-mail %s\n' "$VERSION" ;;
+  help | -h | --help | '') usage ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac

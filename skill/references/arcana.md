@@ -36,11 +36,13 @@ ToolSearch "arcana".
   anything else in the payload after it as a JSON block. A notice from a
   topic isn't mail: nothing to write.
 - **Sending** is still mail: write the message to the outbox, or to drafts
-  when it needs the user, like any other. Delivering by hand, you may send
-  it over the bus instead of locally, for a recipient on another machine
-  or one whose session should see it at once: `arcana_deliver` with `from`
-  set to this project's address, so replies come back to it. Then file it
-  under `.ai/mail/sent/` with `Sent: <date and time> via arcana`.
+  when it needs the user, like any other, and deliver it locally
+  (`dot-ai-mail deliver`) when its recipient is on this machine. A message
+  left in the outbox because no project here has its address goes over
+  the bus: `arcana_deliver` with `from` set to this project's address, so
+  replies come back to it. Then add `Sent: <date and time> via arcana` to
+  its header lines and move it to `.ai/mail/sent/`. Each message goes one
+  way only, so the recipient never gets it twice.
 - **Topics** (`#arcana.releases`) are logs of posts that anyone can read
   at any time, without subscribing: `arcana_inbox address:"#name"
   after:<last seq read>`, which consumes nothing. Subscribing

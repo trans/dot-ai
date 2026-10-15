@@ -1,0 +1,96 @@
+#!/bin/sh
+# Tests for skill/scripts/dot-ai-mail: builds projects in a temporary
+# directory and checks delivery, recovery and the hooks. Run: just test
+SH=${SH:-sh} # the shell to test under: SH="zsh --emulate sh", say
+M=$(cd "$(dirname "$0")/.." && pwd -P)/skill/scripts/dot-ai-mail
+T=$(mktemp -d "${TMPDIR:-/tmp}/dot-ai-mail-test.XXXXXX") || exit 1
+trap 'rm -rf "$T"' EXIT
+P=$T/projects
+printf '[ai]\n\tpath = %s\n' "$P" >"$T/gitconfig"
+GIT_CONFIG_GLOBAL=$T/gitconfig XDG_RUNTIME_DIR=$T/run
+export GIT_CONFIG_GLOBAL XDG_RUNTIME_DIR
+mkdir -p "$T/run"
+unset CLAUDE_PROJECT_DIR
+
+failed=0
+ok() { printf 'ok   %s\n' "$1"; }
+fail() {
+  printf 'FAIL %s\n' "$1"
+  failed=1
+}
+check() { if eval "$2"; then ok "$1"; else fail "$1"; fi; }
+project() {
+  mkdir -p "$P/$1/.ai/mail/inbox" "$P/$1/.ai/mail/outbox" "$P/$1/.ai/mail/sent" "$P/$1/.ai/mail/received"
+  [ -n "$2" ] && printf '%s\n' "$2" >"$P/$1/.ai/config.yml"
+  :
+}
+count() { ls "$1" 2>/dev/null | wc -l | tr -d ' '; }
+
+project alpha 'handle: alpha   # a comment'
+project beta 'handle: "@beta"'
+project group/Gamma.Site ''
+project twin1 'handle: twin'
+project twin2 "handle: 'twin'"
+project .hidden/eps 'handle: eps'
+mkdir -p "$P/delta/.ai" && printf 'handle: delta\n' >"$P/delta/.ai/config.yml"
+ln -s alpha "$P/link"
+A=$P/alpha/.ai/mail B=$P/beta/.ai/mail
+
+# Finding
+check "find: quoted handle" '[ "$($SH "$M" find beta)" = "$P/beta" ]'
+check "find: folded directory name" '[ "$($SH "$M" find gamma-site)" = "$P/group/Gamma.Site" ]'
+check "find: two projects, one address" '! $SH "$M" find twin 2>/dev/null'
+check "find: hidden directories and links skipped" '! $SH "$M" find eps 2>/dev/null && [ "$($SH "$M" find | grep -c "/alpha$")" = 1 ]'
+
+# Delivering
+printf 'By: a helper\n\nHello.\n' >"$A/outbox/20261015-140000Z-@beta--hello.md"
+printf 'no newline' >"$A/outbox/20261015-140100Z-@beta.md"
+printf 'x\n' >"$A/outbox/20261015-140200Z-@twin--dup.md"
+printf 'x\n' >"$A/outbox/20261015-140300Z-#news--post.md"
+printf 'x\n' >"$A/outbox/20261015-140400Z-@delta--nomail.md"
+printf 'x\n' >"$A/outbox/old-name.md"
+out=$(cd "$P/alpha" && $SH "$M" deliver)
+status=$?
+check "deliver: fails when something is left" '[ "$status" -ne 0 ]'
+check "deliver: two delivered, four left" '[ "$(printf "%s\n" "$out" | grep -c "^delivered: ")" = 2 ] && [ "$(count "$A/outbox")" = 4 ]'
+id=$(printf '@alpha\n20261015-140000Z-@beta--hello.md\nHello.\n' | sha256sum 2>/dev/null | cut -c 1-8)
+check "deliver: id from address, name and message" '[ -z "$id" ] || ls "$B/inbox" | grep -q -- "-@alpha--hello-$id.md$"'
+f=$(ls "$B/inbox/"*--hello-*.md)
+check "deliver: inbox file headers" '[ "$(sed -n 1,6p "$f" | cut -d: -f1 | paste -s -d " " -)" = "From To Sent Subject Id Via" ] && grep -qx "Via: local" "$f"'
+check "deliver: message after a blank line" '[ "$(tail -n 2 "$f")" = "$(printf "\nHello.")" ]'
+check "deliver: bytes kept exactly" '[ "$(tail -c 10 "$B/inbox/"*--????????.md)" = "no newline" ]'
+check "deliver: filed with By and Sent" '[ "$(sed -n 1p "$A/sent/20261015-140000Z-@beta--hello.md")" = "By: a helper" ] && sed -n 2p "$A/sent/20261015-140000Z-@beta--hello.md" | grep -q "^Sent: .* via local$"'
+
+# Recovery: delivered but not filed, then filed but not removed
+printf 'By: a helper\n\nHello.\n' >"$A/outbox/20261015-140000Z-@beta--hello.md"
+rm -f "$A/sent/20261015-140000Z-@beta--hello.md"
+mv "$f" "$B/received/"
+printf 'no newline' >"$A/outbox/20261015-140100Z-@beta.md"
+(cd "$P/alpha" && $SH "$M" deliver >/dev/null)
+check "recovery: no second copy" '[ "$(count "$B/inbox")" = 1 ] && [ "$(count "$B/received")" = 1 ]'
+check "recovery: filed, outbox cleared" '[ -f "$A/sent/20261015-140000Z-@beta--hello.md" ] && [ ! -e "$A/outbox/20261015-140100Z-@beta.md" ]'
+
+# Lock
+printf 'x\n' >"$A/outbox/20261015-150000Z-@beta--locked.md"
+mkdir "$A/outbox/.delivering"
+check "lock: a running delivery is left alone" '(cd "$P/alpha" && $SH "$M" deliver) | grep -q "^busy:"'
+touch -t 202001010000 "$A/outbox/.delivering"
+check "lock: a stale lock is cleared" '(cd "$P/alpha" && $SH "$M" deliver) | grep -q "^delivered: 20261015-150000Z"'
+
+# Hooks
+hook() { printf '{"session_id":"%s","cwd":"%s"}' "$2" "$3" | $SH "$M" hook "$1" --agent "$4"; }
+out=$(hook session-start s1 "$P/beta" claude)
+check "session-start: lists the inbox" 'printf "%s" "$out" | grep -q "\"additionalContext\":\"You have mail: 2 messages waiting"'
+check "stop: quiet when nothing is new" 'hook stop s1 "$P/beta" claude 2>/dev/null'
+printf 'x\n' >"$A/outbox/20261015-160000Z-@beta--news.md"
+hook stop a1 "$P/alpha" claude 2>/dev/null
+check "stop: delivers, and says so once" '[ $? -eq 2 ] && hook stop a1 "$P/alpha" claude 2>/dev/null'
+hook stop s1 "$P/beta" claude 2>"$T/err"
+check "stop: new mail keeps Claude going once" '[ $? -eq 2 ] && grep -q "1 new message" "$T/err" && hook stop s1 "$P/beta" claude 2>/dev/null'
+printf 'x\n' >"$A/outbox/20261015-170000Z-@beta--codex.md"
+(cd "$P/alpha" && $SH "$M" deliver >/dev/null)
+check "stop: Codex blocks once" 'hook stop c1 "$P/beta" codex | grep -q "^{\"decision\":\"block\"" && [ "$(hook stop c1 "$P/beta" codex)" = "{}" ]'
+check "stop: no .ai/ is quiet" '[ "$(hook stop c2 "$T" codex)" = "{}" ]'
+
+[ "$failed" = 0 ] && printf 'all passed\n'
+exit "$failed"

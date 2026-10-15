@@ -102,7 +102,10 @@ One message per file. The sender is the project's own address.
 
 The file may start with header lines and a blank line; they are the record,
 not the message. Everything after them is the message, exactly as it will be
-sent.
+sent. The header lines are the file's leading lines that start with `By: `,
+`Held: ` or `Sent: `, and the one blank line after them goes with them; a
+file whose first line isn't one has none, and its message is the whole
+file.
 
 | Line | Added by | Means |
 |---|---|---|
@@ -150,8 +153,9 @@ For each file in the outbox (hidden files and `.gitkeep` aside):
    has no `mail/inbox/`, the message stays in the outbox, and the tool says
    why.
 2. **Take its id:** the first 8 hex digits of the SHA-256 of the sender's
-   address, the outbound file's name and the message, joined by newlines.
-   The same message always has the same id.
+   address, the outbound file's name and the message, joined by newlines
+   (`@ipck`, newline, the name, newline, then the message's bytes exactly
+   as they are in the file). The same message always has the same id.
 3. **Deliver it:** write it into the recipient's `mail/inbox/` as an inbox
    file (below) with `Via: local`, unless a file ending in `-<id>.md` is
    already in its `mail/inbox/` or `mail/received/` (an earlier run that
@@ -168,6 +172,8 @@ A delivery tool doesn't commit: the sender's agents commit `sent/`, and the
 recipient's commit `received/` as they process their inbox (below). A tool
 that runs agents should deliver when a session starts and ends, and an
 agent that clears a message to the outbox should have it delivered then.
+One delivery tool is `dot-ai-mail`, a shell script shipped with the dot-ai
+skill (`skill/scripts/` in this repository).
 
 **Other transports.** Local delivery reaches the projects on this machine.
 A delivery tool may carry mail further over another transport, such as the

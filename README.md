@@ -48,9 +48,11 @@ runs agents and writes their transcripts.
   Codex's skills directories (copies, not links, so they don't depend on
   where this repository is checked out); `just diff` shows how the
   installed copies differ.
-- **dot-ai-mail** (`notes/dot-ai-mail.md`, a design, not built yet) is
-  the delivery tool the Mail spec describes: a shell script that delivers
-  outboxes on this machine and tells agents when mail is waiting.
+- **dot-ai-mail** (`skill/scripts/dot-ai-mail`, designed in
+  `notes/dot-ai-mail.md`) is the delivery tool the Mail spec describes: a
+  shell script that delivers outboxes on this machine and tells agents
+  when mail is waiting. `just install` puts it in `~/.local/bin/`, and
+  `dot-ai-mail hooks` prints the session hooks to add.
 - **Copious** is the first runtime to implement the transcript, record and
   protection parts. Its own canon covers how it does so (numbering, the
   writer, curation, the index).

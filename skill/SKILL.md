@@ -157,8 +157,16 @@ them is the message exactly as it will be sent. The sender is this
 project's address.
 
 **Delivery** takes each message in the outbox to its recipient and files
-the original under `.ai/mail/sent/`. If a delivery tool runs on this
-machine, leave it to the tool. Otherwise the lead delivers by hand:
+the original under `.ai/mail/sent/`. This skill ships a tool for it,
+`scripts/dot-ai-mail` (also installed as `dot-ai-mail` in `~/.local/bin/`
+by the dot.ai repository's `just install`). After you clear a message to
+the outbox, run `dot-ai-mail deliver`, then commit what it filed under
+`sent/`. It prints a line for each message: delivered, or left in the
+outbox and why. Tell the user what was left; a recipient that isn't on this
+machine can be reached over Arcana, if the project uses it. Where its
+session hooks are installed (`dot-ai-mail hooks` prints them), it also
+delivers at the end of each turn and tells you when mail arrives. Without
+the tool, the lead delivers by hand:
 
 1. Find the recipient's project (Other projects, above). If it isn't
    found, is found twice, or has no `.ai/mail/inbox/`, leave the message in
@@ -172,7 +180,8 @@ machine, leave it to the tool. Otherwise the lead delivers by hand:
 3. Add `Sent: <date and time> via local` to the original's header lines
    and move it, under the same name, to `.ai/mail/sent/`.
 
-With Arcana, the bus can carry the message instead (`references/arcana.md`).
+A message left in the outbox because its recipient isn't on this machine
+can go over Arcana (`references/arcana.md`).
 `sent/` is committed and never edited: it's the user's record of exactly
 what was said. When the user asks what went out, point them there.
 Otherwise mention routine mail briefly, by count, and held drafts by name.

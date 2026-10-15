@@ -1,6 +1,7 @@
 # dot-ai-mail
 
-*Draft, 2026-10-14. Not built yet.*
+*Draft, 2026-10-14. Built 2026-10-15: `skill/scripts/dot-ai-mail` 0.1.0,
+tested by `tests/dot-ai-mail.sh` (`just test`).*
 
 A small program that does what [Mail](../spec/mail.md) asks of a delivery
 tool: it delivers each project's outbox on this machine and tells agents
@@ -12,9 +13,10 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 - **One POSIX `sh` script**, `skill/scripts/dot-ai-mail`, shipped inside
   the skill: installing the skill installs it. `just install` also copies
   it to `~/.local/bin/`, so hooks and people can call it by name. Nothing
-  to compile; it runs the same on Linux and macOS.
-- **Needs** `find`, `sed`, `date`, `mv`, `git` (for `ai.path`), and one of
-  `sha256sum`, `shasum -a 256` or `openssl dgst -sha256`.
+  to compile; it's written for Linux and macOS (tested under bash's and
+  zsh's sh modes; dash isn't on the machine it was built on).
+- **Needs** `find`, `sed`, `awk`, `date`, `mv`, `git` (for `ai.path`),
+  and one of `sha256sum`, `shasum -a 256` or `openssl dgst -sha256`.
 - **Reads one line of each config:** the top-level `handle:`, written
   plain (`handle: oyl`) or quoted with or without the `@`
   (`handle: "@oyl"`). A config whose handle it can't read that way is
@@ -33,18 +35,23 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 
 ## Hooks
 
-- **`session-start`:** deliver, then add to the agent's context how many
-  messages wait in `.ai/mail/inbox/` (oldest first, by name), and any left
-  in the outbox with the reason.
+- **`session-start`:** deliver, then add to the agent's context everything
+  in `.ai/mail/inbox/` (oldest first, by name), any message left in the
+  outbox with the reason, and what it delivered.
 - **`stop`** (every time the agent would finish a turn): deliver, then, if
-  the inbox holds files this session hasn't been told of, keep the agent
-  going once to process them (Claude: exit 2 with a line on stderr;
-  Codex: `decision: block`). The names already told of are kept in
+  there's anything this session hasn't been told of (new inbox files, a
+  message newly left in the outbox, messages it just delivered, which the
+  agent should commit), keep the agent going once to deal with it
+  (Claude: exit 2 with the text on stderr; Codex: `decision: block`). What
+  a session was told of is kept in
   `$XDG_RUNTIME_DIR/dot-ai-mail/<session id>` (or under `$TMPDIR`), so a
-  message the agent leaves for later never loops it.
+  message the agent leaves for later never loops it, and
+  `stop_hook_active` isn't needed. Files older than a week are removed.
+- **`session-end`:** deliver, quietly.
 - A hook never stops a session: anything that goes wrong is one line of
-  output and exit 0. It reads `session_id` and `stop_hook_active` from the
-  hook's JSON with `sed` (flat fields; no `jq`).
+  output and exit 0 (2 only to keep the agent going). It reads
+  `session_id` and `cwd` from the hook's JSON with `sed` (flat fields; no
+  `jq`), and the project from `CLAUDE_PROJECT_DIR`, else `cwd`.
 
 ## Delivering
 
@@ -56,17 +63,17 @@ The spec's four steps, with these details:
 - **Outbox names:** the address runs from after the time to the first
   `--`. One that starts with `#` stays put ("topics aren't mail").
 - **The message** for the id is everything after the header lines and the
-  blank line. Header lines are leading lines starting `By: `, `Held: ` or
-  `Sent: `; a file whose first line isn't one has none. (The spec should
-  say this too, so every deliverer computes the same id.)
+  blank line, byte for byte, as the spec now says (Outbound files).
 - **Filing** writes the original, with `Sent: <time> via local` added to
   its header lines, to `sent/.<name>`, renames it into place, then removes
   the outbox copy. A run that stops between steps finds the message again
   next time, sees its id in the recipient's inbox or `received/`, and only
   files it.
-- **No lock.** Two sessions delivering the same outbox at once write the
-  same inbox file under the same name, and the second `mv` to `sent/`
-  finds nothing to move. The id check covers it.
+- **A lock per outbox** (`outbox/.delivering`, a directory, so making it
+  is atomic). The design had none, but the inbox name carries the time of
+  delivery, so two runs a second apart would deliver the same message
+  under two names. A run that finds the lock says `busy` and leaves the
+  outbox; a lock older than two minutes is a crashed run's, and is cleared.
 - **Never commits** (the spec leaves that to the agents).
 
 ## With Arcana installed too
