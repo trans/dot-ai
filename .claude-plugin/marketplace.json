@@ -1,0 +1,15 @@
+{
+  "name": "dot-ai",
+  "description": "dot-ai: project memory and mail for AI agents, in .ai/",
+  "owner": {
+    "name": "trans",
+    "url": "https://github.com/trans"
+  },
+  "plugins": [
+    {
+      "name": "dot-ai",
+      "source": "./",
+      "description": "Project memory and mail for AI agents, kept in a project's .ai/ directory: the dot-ai skill, and dot-ai-mail's session hooks for mail between the projects on this machine."
+    }
+  ]
+}

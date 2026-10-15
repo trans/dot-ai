@@ -1,7 +1,8 @@
 # dot-ai-mail
 
-*Draft, 2026-10-14. Built 2026-10-15: `skill/scripts/dot-ai-mail` 0.1.0,
-tested by `tests/dot-ai-mail.sh` (`just test`).*
+*Draft, 2026-10-14. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
+0.1.0, tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
+the dot-ai plugin (`hooks/hooks.json`).*
 
 A small program that does what [Mail](../spec/mail.md) asks of a delivery
 tool: it delivers each project's outbox on this machine and tells agents
@@ -10,10 +11,11 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 
 ## Form
 
-- **One POSIX `sh` script**, `skill/scripts/dot-ai-mail`, shipped inside
-  the skill: installing the skill installs it. `just install` also copies
-  it to `~/.local/bin/`, so hooks and people can call it by name. Nothing
-  to compile; it's written for Linux and macOS (tested under bash's and
+- **One POSIX `sh` script**, `skills/dot-ai/scripts/dot-ai-mail`, shipped
+  inside the skill, and its hooks in the dot-ai plugin: installing the
+  plugin installs both, in Claude Code and Codex alike. The hooks run it
+  by its path in the plugin (`${CLAUDE_PLUGIN_ROOT}`, which Codex sets
+  too), and the skill tells agents that path. Nothing to compile; it's written for Linux and macOS (tested under bash's and
   zsh's sh modes; dash isn't on the machine it was built on).
 - **Needs** `find`, `sed`, `awk`, `date`, `mv`, `git` (for `ai.path`),
   and one of `sha256sum`, `shasum -a 256` or `openssl dgst -sha256`.
@@ -30,8 +32,8 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 | `dot-ai-mail deliver [DIR]` | Delivers everything in the outbox of the project at or above `DIR` (default: here). One line per message: delivered, or left in the outbox and why. |
 | `dot-ai-mail check [DIR]` | Lists the inbox, oldest first. Exits 1 when it's empty, for scripts. |
 | `dot-ai-mail find [ADDRESS]` | Where an address's project is, or every project found with its address: to see why something wasn't delivered. |
-| `dot-ai-mail hook EVENT [--agent claude\|codex]` | What the session hooks run (below). |
-| `dot-ai-mail hooks` | Prints the hook entries to add to Claude Code's and Codex's settings. It doesn't edit them: JSON is the one thing `sh` can't safely rewrite. |
+| `dot-ai-mail hook EVENT [--agent claude\|codex]` | What the session hooks run (below). The plugin's hooks name no agent: `PLUGIN_ROOT` set means Codex (Claude Code sets only `CLAUDE_*`), else `CLAUDE_PROJECT_DIR` set means Claude Code, else Codex. |
+| `dot-ai-mail hooks` | Prints the hook entries to add to Claude Code's and Codex's settings, for use without the plugin. It doesn't edit them: JSON is the one thing `sh` can't safely rewrite. |
 
 ## Hooks
 

@@ -37,7 +37,7 @@ ToolSearch "arcana".
   topic isn't mail: nothing to write.
 - **Sending** is still mail: write the message to the outbox, or to drafts
   when it needs the user, like any other, and deliver it locally
-  (`dot-ai-mail deliver`) when its recipient is on this machine. A message
+  (the skill's `scripts/dot-ai-mail deliver`) when its recipient is on this machine. A message
   left in the outbox because no project here has its address goes over
   the bus: `arcana_deliver` with `from` set to this project's address, so
   replies come back to it. Then add `Sent: <date and time> via arcana` to

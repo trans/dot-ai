@@ -158,15 +158,16 @@ project's address.
 
 **Delivery** takes each message in the outbox to its recipient and files
 the original under `.ai/mail/sent/`. This skill ships a tool for it,
-`scripts/dot-ai-mail` (also installed as `dot-ai-mail` in `~/.local/bin/`
-by the dot.ai repository's `just install`). After you clear a message to
-the outbox, run `dot-ai-mail deliver`, then commit what it filed under
-`sent/`. It prints a line for each message: delivered, or left in the
-outbox and why. Tell the user what was left; a recipient that isn't on this
-machine can be reached over Arcana, if the project uses it. Where its
-session hooks are installed (`dot-ai-mail hooks` prints them), it also
-delivers at the end of each turn and tells you when mail arrives. Without
-the tool, the lead delivers by hand:
+`scripts/dot-ai-mail` in this skill's directory. After you clear a message
+to the outbox, run it with `sh` by its path and the command `deliver`
+(`sh <skill directory>/scripts/dot-ai-mail deliver`), then commit what it
+filed under `sent/`. It prints a line for each message: delivered, or left
+in the outbox and why. Tell the user what was left; a recipient that isn't
+on this machine can be reached over Arcana, if the project uses it.
+Installed as the dot-ai plugin, the skill comes with dot-ai-mail's session
+hooks, which also deliver at the end of each turn and tell you when mail
+arrives (without the plugin, `dot-ai-mail hooks` prints them to add by
+hand). Without the tool, the lead delivers by hand:
 
 1. Find the recipient's project (Other projects, above). If it isn't
    found, is found twice, or has no `.ai/mail/inbox/`, leave the message in

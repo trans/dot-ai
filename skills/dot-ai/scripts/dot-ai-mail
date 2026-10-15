@@ -22,7 +22,8 @@ dot-ai-mail: deliver .ai/ mail between the projects on this machine
   dot-ai-mail hook EVENT [--agent claude|codex]
                                what the session hooks run: session-start, stop,
                                session-end (reads the hook's JSON on stdin)
-  dot-ai-mail hooks            print the hook entries for Claude Code and Codex
+  dot-ai-mail hooks            print the hook entries for Claude Code and Codex,
+                               for use without the dot-ai plugin
   dot-ai-mail version
 EOF
 }
@@ -359,7 +360,17 @@ cmd_hook() {
     session-start | stop | session-end) ;;
     *) die "usage: dot-ai-mail hook session-start|stop|session-end [--agent claude|codex]" ;;
   esac
-  [ -n "$agent" ] || { [ -n "${CLAUDE_PROJECT_DIR:-}" ] && agent=claude || agent=codex; }
+  # Without --agent (the plugin's hooks): Codex sets PLUGIN_ROOT, Claude Code
+  # doesn't; Claude Code sets CLAUDE_PROJECT_DIR (Codex may too)
+  if [ -z "$agent" ]; then
+    if [ -n "${PLUGIN_ROOT:-}" ]; then
+      agent=codex
+    elif [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+      agent=claude
+    else
+      agent=codex
+    fi
+  fi
   if [ -t 0 ]; then PAYLOAD=; else PAYLOAD=$(cat); fi
   session=$(json_field session_id | tr -c 'A-Za-z0-9_.-' '_')
   cwd=$(json_field cwd)
@@ -431,6 +442,8 @@ cmd_hooks() {
   self=$(command -v dot-ai-mail 2>/dev/null) || self=$0
   case $self in /*) ;; *) self=$(cd "$(dirname "$self")" && pwd -P)/$(basename "$self") ;; esac
   cat <<EOF
+The dot-ai plugin installs these hooks itself. Without it:
+
 Claude Code: merge these into "hooks" in ~/.claude/settings.json
 
   "SessionStart": [{"hooks": [{"type": "command", "command": "$self hook session-start --agent claude"}]}],

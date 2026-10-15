@@ -1,0 +1,38 @@
+{
+  "description": "dot-ai-mail: deliver .ai/mail/outbox to the projects on this machine, and tell the agent when mail is waiting",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai-mail\" hook session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai-mail\" hook stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai-mail\" hook session-end",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

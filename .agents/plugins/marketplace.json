@@ -1,0 +1,17 @@
+{
+  "name": "dot-ai",
+  "interface": {
+    "displayName": "dot-ai"
+  },
+  "plugins": [
+    {
+      "name": "dot-ai",
+      "description": "Project memory and mail for AI agents, kept in a project's .ai/ directory: the dot-ai skill, and dot-ai-mail's session hooks for mail between the projects on this machine.",
+      "category": "productivity",
+      "source": {
+        "source": "local",
+        "path": "./"
+      }
+    }
+  ]
+}

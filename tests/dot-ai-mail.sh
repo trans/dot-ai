@@ -1,8 +1,8 @@
 #!/bin/sh
-# Tests for skill/scripts/dot-ai-mail: builds projects in a temporary
+# Tests for skills/dot-ai/scripts/dot-ai-mail: builds projects in a temporary
 # directory and checks delivery, recovery and the hooks. Run: just test
 SH=${SH:-sh} # the shell to test under: SH="zsh --emulate sh", say
-M=$(cd "$(dirname "$0")/.." && pwd -P)/skill/scripts/dot-ai-mail
+M=$(cd "$(dirname "$0")/.." && pwd -P)/skills/dot-ai/scripts/dot-ai-mail
 T=$(mktemp -d "${TMPDIR:-/tmp}/dot-ai-mail-test.XXXXXX") || exit 1
 trap 'rm -rf "$T"' EXIT
 P=$T/projects
@@ -10,7 +10,7 @@ printf '[ai]\n\tpath = %s\n' "$P" >"$T/gitconfig"
 GIT_CONFIG_GLOBAL=$T/gitconfig XDG_RUNTIME_DIR=$T/run
 export GIT_CONFIG_GLOBAL XDG_RUNTIME_DIR
 mkdir -p "$T/run"
-unset CLAUDE_PROJECT_DIR
+unset CLAUDE_PROJECT_DIR PLUGIN_ROOT
 
 failed=0
 ok() { printf 'ok   %s\n' "$1"; }
@@ -90,6 +90,15 @@ check "stop: new mail keeps Claude going once" '[ $? -eq 2 ] && grep -q "1 new m
 printf 'x\n' >"$A/outbox/20261015-170000Z-@beta--codex.md"
 (cd "$P/alpha" && $SH "$M" deliver >/dev/null)
 check "stop: Codex blocks once" 'hook stop c1 "$P/beta" codex | grep -q "^{\"decision\":\"block\"" && [ "$(hook stop c1 "$P/beta" codex)" = "{}" ]'
+
+# The plugin's hooks name no agent: PLUGIN_ROOT means Codex
+printf 'x\n' >"$A/outbox/20261015-180000Z-@beta--plugin.md"
+(cd "$P/alpha" && $SH "$M" deliver >/dev/null)
+out=$(printf '{"session_id":"p1","cwd":"%s"}' "$P/beta" | PLUGIN_ROOT=/x CLAUDE_PROJECT_DIR="$P/beta" $SH "$M" hook stop)
+check "plugin hook: Codex when PLUGIN_ROOT is set" 'printf "%s" "$out" | grep -q "^{\"decision\":\"block\""'
+printf '{"session_id":"p2","cwd":"%s"}' "$P/beta" | CLAUDE_PROJECT_DIR="$P/beta" $SH "$M" hook stop >/dev/null 2>&1
+status=$?
+check "plugin hook: Claude Code when only CLAUDE_PROJECT_DIR is set" '[ "$status" -eq 2 ]'
 check "stop: no .ai/ is quiet" '[ "$(hook stop c2 "$T" codex)" = "{}" ]'
 
 [ "$failed" = 0 ] && printf 'all passed\n'

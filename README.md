@@ -18,7 +18,32 @@ history.
 
 This repository is the specification: the layout, the file formats, and the
 rules that keep what is committed safe to publish. Any tool or agent that
-reads or writes `.ai/` follows it.
+reads or writes `.ai/` follows it. It is also the dot-ai plugin for Claude
+Code and Codex, which teaches agents to work this way.
+
+## Install
+
+The plugin brings the dot-ai skill and dot-ai-mail's session hooks, which
+deliver mail between the projects on this machine and tell the agent when
+mail is waiting. In Claude Code:
+
+```sh
+claude plugin marketplace add trans/dot-ai
+claude plugin install dot-ai@dot-ai
+```
+
+In Codex (which asks you to trust the plugin's hooks before it runs them):
+
+```sh
+codex plugin marketplace add trans/dot-ai
+codex plugin add dot-ai@dot-ai
+```
+
+Updates come through each tool's plugin manager (`claude plugin update
+dot-ai@dot-ai`, `codex plugin marketplace upgrade dot-ai`). A copy of the
+skill installed by hand (`~/.claude/skills/dot-ai`, `~/.codex/skills/dot-ai`)
+should be removed, or the skill loads twice. To try a change from a
+checkout, `claude --plugin-dir .` loads it for one session.
 
 | Document | Covers |
 |---|---|
@@ -41,18 +66,19 @@ runs agents and writes their transcripts.
 
 ## Related
 
-- **The dot-ai skill** (`skill/`) tells an agent how to work with `.ai/`
-  day to day (when to read notes, how to triage mail). This spec is what
-  the skill's conventions rest on, and a change to one goes into the other
-  in the same commit. `just install` copies it to Claude Code's and
-  Codex's skills directories (copies, not links, so they don't depend on
-  where this repository is checked out); `just diff` shows how the
-  installed copies differ.
-- **dot-ai-mail** (`skill/scripts/dot-ai-mail`, designed in
+- **The dot-ai skill** (`skills/dot-ai/`) tells an agent how to work with
+  `.ai/` day to day (when to read notes, how to triage mail). This spec is
+  what the skill's conventions rest on, and a change to one goes into the
+  other in the same commit.
+- **dot-ai-mail** (`skills/dot-ai/scripts/dot-ai-mail`, designed in
   `notes/dot-ai-mail.md`) is the delivery tool the Mail spec describes: a
   shell script that delivers outboxes on this machine and tells agents
-  when mail is waiting. `just install` puts it in `~/.local/bin/`, and
-  `dot-ai-mail hooks` prints the session hooks to add.
+  when mail is waiting. The plugin runs it from `hooks/hooks.json`;
+  without the plugin, `dot-ai-mail hooks` prints the entries to add to
+  each tool's settings.
+- **The plugin's manifests** are `.claude-plugin/` (Claude Code's plugin
+  and marketplace) and `.codex-plugin/` with `.agents/plugins/` (Codex's).
+  Neither sets a version, so Claude Code takes each commit as a new one.
 - **Copious** is the first runtime to implement the transcript, record and
   protection parts. Its own canon covers how it does so (numbering, the
   writer, curation, the index).

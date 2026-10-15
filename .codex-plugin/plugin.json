@@ -1,0 +1,17 @@
+{
+  "name": "dot-ai",
+  "description": "Project memory and mail for AI agents, kept in a project's .ai/ directory: the dot-ai skill, and dot-ai-mail's session hooks, which deliver mail between the projects on this machine and tell the agent when mail is waiting.",
+  "author": {
+    "name": "trans",
+    "url": "https://github.com/trans"
+  },
+  "homepage": "https://github.com/trans/dot-ai",
+  "repository": "https://github.com/trans/dot-ai",
+  "keywords": ["memory", "notes", "mail", "agents", "coordination"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "dot-ai",
+    "shortDescription": "Project memory and mail for agents, in .ai/",
+    "category": "productivity"
+  }
+}

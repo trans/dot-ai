@@ -173,7 +173,8 @@ recipient's commit `received/` as they process their inbox (below). A tool
 that runs agents should deliver when a session starts and ends, and an
 agent that clears a message to the outbox should have it delivered then.
 One delivery tool is `dot-ai-mail`, a shell script shipped with the dot-ai
-skill (`skill/scripts/` in this repository).
+skill (`skills/dot-ai/scripts/` in this repository), whose plugin runs it
+from Claude Code's and Codex's session hooks.
 
 **Other transports.** Local delivery reaches the projects on this machine.
 A delivery tool may carry mail further over another transport, such as the
