@@ -1,6 +1,6 @@
 # dot-ai-mail
 
-*Draft, 2026-10-14. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
+*Draft, 2026-10-14; updated 2026-10-16. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
 0.1.0, tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
 the dot-ai plugin (`hooks/hooks.json`).*
 
@@ -94,43 +94,49 @@ the bus has mail for it, and at session end move unread bus mail into
   goes one way only, and whoever moves it to `sent/` sent it, so the
   recipient never gets it twice.
 - **Receiving:** both write inbox files, dot-ai-mail with `Via: local` and
-  Arcana with `Via: arcana, …`, under different names. Agents process them
-  alike.
+  Arcana with `Via: arcana` (since 0.35.4), under different names. Agents
+  process them alike.
 - **Noticing:** at session start and at Stop, each reports its own place:
   Arcana the bus mailbox, dot-ai-mail the inbox folder. The two places
   don't overlap, so neither counts a message the other has. Both can keep
-  the agent going at Stop, and each does so only once for the same mail,
-  so they can't push each other into a loop.
+  the agent going at Stop, and each does so only once for the same mail
+  (Arcana from a fix @arcana made on 2026-10-16; before it, Arcana nudged
+  again while bus mail sat unread), so they can't push each other into a
+  loop. An agent may hear of mail twice, but never misses any.
 
 @arcana agreed to these three (2026-10-14,
 `mail/received/20261014-072229Z-@arcana--…-0983c0fd.md` in ipck's `.ai/`).
 Arcana 0.35.4 (`cd9852e`) has `arcana_receive` write the inbox file, so
 mail taken live is a file too.
 
-## Later: one voice
+## Decided: dot-ai-mail never calls Arcana
 
-The user is still deciding (2026-10-14). The idea: dot-ai stands on its own
-because it needs nothing installed, and leads on to Arcana, which adds what
-files can't reach (other machines, cloud agents, live sessions, services)
-without changing anything in `.ai/`. @arcana's proposal for that step
-(2026-10-14, `…-51da5b86.md`):
+The user decided (2026-10-16, through @arcana: `…-e844c843.md` in ipck's
+`.ai/`): dot-ai-mail is light mail for one machine without Arcana, so it
+doesn't call Arcana even when Arcana is installed. Each tool announces its
+own place, as above, rather than dot-ai-mail being the one voice.
+@arcana's earlier proposal for one voice (2026-10-14, `…-51da5b86.md`: an
+`arcana hook drain` that dot-ai-mail's Stop hook runs first) was built
+(arcana `3de6471`) but won't ship for this. dot-ai stands on its own and
+leads on to Arcana, which adds what files can't reach (other machines,
+cloud agents, live sessions, services) without changing anything in
+`.ai/`. Nor does dot-ai-mail step aside when Arcana is installed: Arcana
+would have to re-implement local delivery, and nothing would be delivered
+while the bus is down.
 
-- **dot-ai-mail is the one voice.** It announces mail; Arcana's Stop hook
-  is left out. Arcana won't move bus mail into the inbox from its own Stop
-  hook: Claude Code runs one event's hooks in parallel, so dot-ai-mail
-  could scan the inbox before Arcana's files land, and the agent would stop
-  without hearing of them. Instead Arcana adds a command (`arcana hook
-  drain`, say) that writes waiting bus mail into the inbox and prints the
-  files; dot-ai-mail's Stop hook runs it first when `arcana` is installed.
-- **Arcana sends what dot-ai-mail can't place,** and files it under
-  `sent/` with `via arcana`, so the lead no longer sends by hand.
-- **The upgrade shows itself:** a message dot-ai-mail can't place says so,
-  and that Arcana could deliver it ("@x isn't on this machine").
-- **No draining where the inbox won't last** (a cloud container): the bus
-  keeps unread mail, and `arcana_receive` writes the file when it's read.
-- dot-ai-mail stays tiny; anything complicated belongs in Arcana.
+## Open
 
-Nothing is scheduled on Arcana's side until the user decides.
+- **Which project a session is in** (@arcana's review, 2026-10-16,
+  `…-6d54cbb1.md`): dot-ai-mail walks up to the nearest `.ai/`, so a
+  session in a directory without one, inside a directory that has one,
+  gets the outer project's inbox and outbox. Arcana's hooks don't walk up.
+  @arcana suggests stopping the walk at the top of the enclosing git
+  repository.
+- **Whether mail needs `sent/` and `received/` when transcripts are
+  committed** (the user's question, 2026-10-16). Not decided.
+- **`arcana_deliver` writing the `sent/` copy**, the mirror of
+  `arcana_receive` writing the inbox file: an agent can send over the bus
+  without the outbox, and then nothing reaches `sent/`. Not decided.
 
 ## Copious
 
@@ -141,8 +147,5 @@ is why the spec should pin down the header lines.
 
 ## Not in the first version
 
-- Carrying mail over Arcana itself: Arcana has no send command for a
-  script yet, so the lead sends with `arcana_deliver` (see Later: one
-  voice).
 - Mail between machines without a bus (an open question in the README).
 - Windows.
