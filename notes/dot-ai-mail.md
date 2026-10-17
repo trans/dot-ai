@@ -137,14 +137,18 @@ file with `view`, pinned views aren't persisted, and the transcript keeps
 only the call. Since `received/` is never edited, the path is a lasting
 reference.
 
+## Decided: a session's project is the nearest `.ai/` above it
+
+@arcana's review (2026-10-16, `…-6d54cbb1.md`) found that dot-ai-mail
+walks up to the nearest `.ai/` while Arcana's hooks take a directory
+without one as a project of its own, and suggested stopping the walk at
+the top of the git repository. The user decided (2026-10-17) that the
+walk is right, as [Layout](../spec/layout.md) already said: a directory
+without its own `.ai/` belongs to the project above it, whose agent is
+responsible for it until the user gives it one.
+
 ## Open
 
-- **Which project a session is in** (@arcana's review, 2026-10-16,
-  `…-6d54cbb1.md`): dot-ai-mail walks up to the nearest `.ai/`, so a
-  session in a directory without one, inside a directory that has one,
-  gets the outer project's inbox and outbox. Arcana's hooks don't walk up.
-  @arcana suggests stopping the walk at the top of the enclosing git
-  repository.
 - **`arcana_deliver` writing the `sent/` copy**, the mirror of
   `arcana_receive` writing the inbox file: an agent can send over the bus
   without the outbox, and then nothing reaches `sent/`. Not decided.

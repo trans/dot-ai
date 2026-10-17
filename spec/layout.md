@@ -35,7 +35,10 @@ projects below it (`c0/` holding `c0/c0-cr/`, each with its own `.ai/`).
 Each is a project of its own, with its own `.ai/`, handle and mail. Only
 real nesting counts: a symbolic link to a project elsewhere doesn't make it
 part of the directory holding the link. The project an agent works in is
-the nearest directory, at or above where it works, that holds `.ai/`.
+the nearest directory, at or above where it works, that holds `.ai/`. So a
+directory without its own `.ai/` belongs to the project above it, whose
+agent is responsible for it until the user gives it an `.ai/` of its own;
+from then on that agent only oversees it.
 
 An overseer may read the `.ai/` of the projects below it (their status,
 their notes). It writes to them only by mail.

@@ -100,6 +100,11 @@ may sit inside another (an overseer that keeps track of the projects below
 it), but don't follow symbolic links: each project is found once, where it
 really is.
 
+The project you work in is the nearest directory, at or above where you
+work, that holds `.ai/`. A directory without its own belongs to the
+project above it, whose agent is responsible for it until the user gives
+it an `.ai/` of its own; from then on that agent only oversees it.
+
 You may read another project's `.ai/` (its status, its notes): that's how
 an overseer keeps track. Write to it only by mail.
 
