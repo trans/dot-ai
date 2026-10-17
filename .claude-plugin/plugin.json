@@ -1,5 +1,6 @@
 {
   "name": "dot-ai",
+  "version": "0.3.0",
   "description": "Project memory and mail for AI agents, kept in a project's .ai/ directory: the dot-ai skill, and dot-ai-mail's session hooks, which deliver mail between the projects on this machine and tell the agent when mail is waiting.",
   "author": {
     "name": "trans",

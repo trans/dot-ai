@@ -40,7 +40,10 @@ codex plugin add dot-ai@dot-ai
 ```
 
 Updates come through each tool's plugin manager (`claude plugin update
-dot-ai@dot-ai`, `codex plugin marketplace upgrade dot-ai`). A copy of the
+dot-ai@dot-ai`, `codex plugin marketplace upgrade dot-ai`). Claude Code
+updates the plugin only when its version goes up, so a change meant to
+reach users raises `version` in both `.claude-plugin/plugin.json` and
+`.codex-plugin/plugin.json`. A copy of the
 skill installed by hand (`~/.claude/skills/dot-ai`, `~/.codex/skills/dot-ai`)
 should be removed, or the skill loads twice. To try a change from a
 checkout, `claude --plugin-dir .` loads it for one session.
