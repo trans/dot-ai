@@ -8,7 +8,7 @@
 
 LC_ALL=C
 export LC_ALL
-VERSION=0.1.0
+VERSION=0.2.0
 MAX_DEPTH=4 # how far below a search root a project may sit
 TAB=$(printf '\t')
 
@@ -165,12 +165,29 @@ sha256() {
 }
 
 # "H K" for an outbound file: it has H header lines (leading lines starting
-# `By: `, `Held: ` or `Sent: `), and its message starts on line K, after
-# them and the blank line that ends them.
+# `By: `, `Held: `, `Re: `, `Sent: ` or `Id: `), and its message starts on
+# line K, after them and the blank line that ends them.
 layout() {
-  awk '/^(By|Held|Sent): / { h++; next }
+  awk '/^(By|Held|Re|Sent|Id): / { h++; next }
        { b = (h > 0 && $0 == ""); exit }
        END { print h + 0, h + b + 1 }' "$1"
+}
+
+# Whether a Re: line names something: a message's id (hex digits, 8 or
+# more) or a topic's post (#topic:number)
+re_ok() {
+  case $1 in
+    \#*:*)
+      p=${1##*:} t=${1%:*}
+      t=${t#\#}
+      case $p in '' | *[!0-9]*) return 1 ;; esac
+      case $t in '' | *[!a-z0-9.-]*) return 1 ;; esac
+      ;;
+    *)
+      [ ${#1} -ge 8 ] || return 1
+      case $1 in *[!0-9a-f]*) return 1 ;; esac
+      ;;
+  esac
 }
 
 # Delivers the outbox of the project at ROOT: one line per message
@@ -237,6 +254,12 @@ deliver() {
 
     set -- $(layout "$f")
     h=$1 k=$2
+    re=
+    [ "$h" -gt 0 ] && re=$(head -n "$h" "$f" | sed -n 's/^Re: *//p' | head -n 1 | tr -d '\r' | sed 's/[[:space:]]*$//')
+    if [ -n "$re" ] && ! re_ok "$re"; then
+      printf 'left in the outbox: %s: its Re: line isn'\''t a message'\''s id or a topic'\''s post (#topic:number)\n' "$name"
+      continue
+    fi
     id=$({
       printf '%s\n%s\n' "$sender" "$name"
       tail -n "+$k" "$f"
@@ -255,7 +278,9 @@ deliver() {
       if ! {
         printf 'From: %s\nTo: %s\nSent: %s\n' "$sender" "$to" "$iso"
         [ -n "$topic" ] && printf 'Subject: %s\n' "$topic"
-        printf 'Id: %s\nVia: local\n\n' "$id"
+        printf 'Id: %s\n' "$id"
+        [ -n "$re" ] && printf 'Re: %s\n' "$re"
+        printf 'Via: local\n\n'
         tail -n "+$k" "$f"
       } >"$tmp" 2>/dev/null || ! mv "$tmp" "$dir/.ai/mail/inbox/$iname"; then
         rm -f "$tmp"
@@ -264,14 +289,14 @@ deliver() {
       fi
     fi
 
-    # File the original under sent/, with a Sent: line
+    # File the original under sent/, with Sent: and Id: lines
     sent=$root/.ai/mail/sent
     mkdir -p "$sent"
     if [ ! -e "$sent/$name" ]; then
       tmp=$sent/.$name.$$
       if ! {
         [ "$h" -gt 0 ] && head -n "$h" "$f"
-        printf 'Sent: %s via local\n\n' "$iso"
+        printf 'Sent: %s via local\nId: %s\n\n' "$iso" "$id"
         tail -n "+$k" "$f"
       } >"$tmp" || ! mv "$tmp" "$sent/$name"; then
         rm -f "$tmp"

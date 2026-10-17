@@ -156,10 +156,13 @@ the recipient's address: `<time>-<address>--<topic>.md`, for example
 (`date -u +%Y%m%d-%H%M%SZ`), so every mail folder lists in the order things
 happened; the address runs from the `@` to the first `--`; the topic is a
 few lowercase words joined by `-`. The file keeps its name as it moves
-between folders. It may start with header lines (`By:`, `Held:`, `Sent:`)
-and a blank line; they are the record, not the message. Everything after
-them is the message exactly as it will be sent. The sender is this
-project's address.
+between folders. It may start with header lines (`By:`, `Held:`, `Re:`,
+`Sent:`, `Id:`) and a blank line; they are the record, not the message,
+except `Re:`, which goes with it. Everything after them is the message
+exactly as it will be sent. The sender is this project's address. When you
+answer a message, start the file with `Re: <id>`, the `Id:` of the inbox
+file you're answering (or `Re: #topic:<number>` for a topic post), so the
+thread can be followed on both sides.
 
 **Delivery** takes each message in the outbox to its recipient and files
 the original under `.ai/mail/sent/`. This skill ships a tool for it,
@@ -182,13 +185,15 @@ lead deliver by hand:
    found, is found twice, or has no `.ai/mail/inbox/`, leave the message in
    the outbox and tell the user why.
 2. Write the message into the recipient's `.ai/mail/inbox/` as an inbox
-   file (Receiving, below) with `Via: local`. Its id is the first 8 hex
+   file (Receiving, below) with `Via: local`, and its `Re:` line if it has
+   one. Its id is the first 8 hex
    digits of the SHA-256 of this project's address, the outbound file's
    name and the message, joined by newlines. If a file ending in
    `-<id>.md` is already in the recipient's `mail/inbox/` or
    `mail/received/`, it was delivered before: skip to step 3.
-3. Add `Sent: <date and time> via local` to the original's header lines
-   and move it, under the same name, to `.ai/mail/sent/`.
+3. Add `Sent: <date and time> via local` and `Id: <id>` to the
+   original's header lines and move it, under the same name, to
+   `.ai/mail/sent/`.
 
 A message left in the outbox because its recipient isn't on this machine
 can go over Arcana (`references/arcana.md`).
@@ -215,7 +220,7 @@ project subscribed to it, so it sends a notice of each new post
 (`20261014-021714Z-#arcana.releases--post-3-a1b2c3d4.md`). A notice isn't
 mail (Processing the inbox, below).
 Inbox files start with header lines (`From:`, `To:`, `Sent:`, `Subject:`,
-`Id:`, `Via:`), a blank line, then the message. Anything the sender
+`Id:`, `Re:` on a reply, `Via:`), a blank line, then the message. Anything the sender
 attached beyond text follows as a JSON block. A file whose name starts with
 `.` is a delivery in progress; leave it.
 When the user says "check mail" (agent mail, not email), look here, and on

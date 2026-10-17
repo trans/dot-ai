@@ -1,7 +1,7 @@
 # dot-ai-mail
 
-*Draft, 2026-10-14; updated 2026-10-16. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
-0.1.0, tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
+*Draft, 2026-10-14; updated 2026-10-17. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
+0.1.0; 0.2.0 (2026-10-17) adds `Re:` and `Id:`. Tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
 the dot-ai plugin (`hooks/hooks.json`).*
 
 A small program that does what [Mail](../spec/mail.md) asks of a delivery
@@ -66,8 +66,12 @@ The spec's four steps, with these details:
   `--`. One that starts with `#` stays put ("topics aren't mail").
 - **The message** for the id is everything after the header lines and the
   blank line, byte for byte, as the spec now says (Outbound files).
-- **Filing** writes the original, with `Sent: <time> via local` added to
-  its header lines, to `sent/.<name>`, renames it into place, then removes
+- **`Re:`** goes to the inbox file as it is, if it names a message's id
+  (8 or more hex digits, so an older Arcana id fits too) or a topic's
+  post (`#topic:number`); one that names neither stays in the outbox,
+  with a reason. Like the other header lines, it isn't part of the id.
+- **Filing** writes the original, with `Sent: <time> via local` and
+  `Id: <id>` added to its header lines, to `sent/.<name>`, renames it into place, then removes
   the outbox copy. A run that stops between steps finds the message again
   next time, sees its id in the recipient's inbox or `received/`, and only
   files it.
@@ -116,8 +120,8 @@ The user decided (2026-10-16, through @arcana: `…-e844c843.md` in ipck's
 doesn't call Arcana even when Arcana is installed. Each tool announces its
 own place, as above, rather than dot-ai-mail being the one voice.
 @arcana's earlier proposal for one voice (2026-10-14, `…-51da5b86.md`: an
-`arcana hook drain` that dot-ai-mail's Stop hook runs first) was built
-(arcana `3de6471`) but won't ship for this. dot-ai stands on its own and
+`arcana hook drain` that dot-ai-mail's Stop hook runs first) was built,
+then removed before release. dot-ai stands on its own and
 leads on to Arcana, which adds what files can't reach (other machines,
 cloud agents, live sessions, services) without changing anything in
 `.ai/`. Nor does dot-ai-mail step aside when Arcana is installed: Arcana
@@ -145,13 +149,27 @@ without one as a project of its own, and suggested stopping the walk at
 the top of the git repository. The user decided (2026-10-17) that the
 walk is right, as [Layout](../spec/layout.md) already said: a directory
 without its own `.ai/` belongs to the project above it, whose agent is
-responsible for it until the user gives it one.
+responsible for it until the user gives it one. Arcana's hooks and bridge
+now walk up the same way (the user, 2026-10-17; arcana 0.35.5, `1cb0528`,
+`…-8f32ce65.md`), so both tools find the same project.
+
+## Decided: `arcana_deliver` files the `sent/` copy
+
+The mirror of `arcana_receive` writing the inbox file: an agent can send
+over the bus without the outbox, and then nothing reached `sent/`. The
+user decided (2026-10-17, `…-19d7c47a.md` in ipck's `.ai/`) that
+`arcana_deliver` writes the copy itself (arcana 0.35.5, `0521bc2`, not
+released yet), for a message from the project's address to an agent.
 
 ## Open
 
-- **`arcana_deliver` writing the `sent/` copy**, the mirror of
-  `arcana_receive` writing the inbox file: an agent can send over the bus
-  without the outbox, and then nothing reaches `sent/`. Not decided.
+- **A message dot-ai-mail can't place, sent over the bus.** Once Arcana
+  files its own copy, the lead's step under "Sending" (move the outbox
+  file to `sent/`) files it a second time, under another name. Arcana
+  could send the outbox file itself (`arcana send FILE`, or a `file`
+  argument to `arcana_deliver`) and file it under its own name; @arcana
+  offered it, and it isn't built. Until then the skill's
+  `references/arcana.md` keeps the step as it is.
 
 ## Copious
 

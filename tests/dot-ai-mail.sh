@@ -101,5 +101,20 @@ status=$?
 check "plugin hook: Claude Code when only CLAUDE_PROJECT_DIR is set" '[ "$status" -eq 2 ]'
 check "stop: no .ai/ is quiet" '[ "$(hook stop c2 "$T" codex)" = "{}" ]'
 
+# Replies and ids
+G=$P/group/Gamma.Site/.ai/mail
+printf 'Re: 1a2b3c4d\n\nThanks.\n' >"$A/outbox/20261015-190000Z-@gamma-site--thanks.md"
+printf 'Re: #arcana.releases:3\n\nNoted.\n' >"$A/outbox/20261015-190100Z-@gamma-site--release.md"
+printf 'Re: the schema\n\nx\n' >"$A/outbox/20261015-190200Z-@gamma-site--bad.md"
+out=$(cd "$P/alpha" && $SH "$M" deliver)
+check "re: a line naming nothing is left in the outbox" 'printf "%s\n" "$out" | grep -q "^left in the outbox: 20261015-190200Z-@gamma-site--bad.md: its Re: line"'
+id=$(printf '@alpha\n20261015-190000Z-@gamma-site--thanks.md\nThanks.\n' | sha256sum 2>/dev/null | cut -c 1-8)
+check "re: not part of the id" '[ -z "$id" ] || ls "$G/inbox" | grep -q -- "--thanks-$id.md$"'
+f=$(ls "$G/inbox/"*--thanks-*.md)
+check "re: carried to the inbox file" '[ "$(sed -n 1,7p "$f" | cut -d: -f1 | paste -s -d " " -)" = "From To Sent Subject Id Re Via" ] && grep -qx "Re: 1a2b3c4d" "$f" && [ "$(tail -n 2 "$f")" = "$(printf "\nThanks.")" ]'
+check "re: a topic's post" 'grep -qx "Re: #arcana.releases:3" "$G/inbox/"*--release-*.md'
+s=$A/sent/20261015-190000Z-@gamma-site--thanks.md
+check "id: the sent copy has Re, Sent and Id" '[ "$(sed -n 1,3p "$s" | cut -d: -f1 | paste -s -d " " -)" = "Re Sent Id" ] && grep -qx "Id: $(sed -n "s/^Id: //p" "$f")" "$s" && [ "$(tail -n 2 "$s")" = "$(printf "\nThanks.")" ]'
+
 [ "$failed" = 0 ] && printf 'all passed\n'
 exit "$failed"
