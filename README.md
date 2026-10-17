@@ -116,3 +116,11 @@ runs agents and writes their transcripts.
 - **Mail on a public branch.** `mail/sent/` and `mail/received/` are
   committed, so on a public repository they are public. Whether they need
   redaction or encryption is open.
+- **Where an outbound file's header lines end.** There's no divider: they
+  are the leading lines that start with a known label (`By:`, `Held:`,
+  `Re:`, `Sent:`, `Id:`). So a tool older than a label delivers that line
+  as part of the message, as dot-ai-mail 0.1.0 would with `Re:`. A marker
+  of our own would let tools skip header lines they don't know. It
+  shouldn't be YAML front matter: YAML takes a leading `@` as reserved and
+  `#` as the start of a comment, so every address would need quotes. To
+  come back to (the user, 2026-10-17).
