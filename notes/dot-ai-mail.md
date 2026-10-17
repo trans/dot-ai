@@ -124,6 +124,19 @@ cloud agents, live sessions, services) without changing anything in
 would have to re-implement local delivery, and nothing would be delivered
 while the bus is down.
 
+## Decided: mail keeps its record
+
+Mail is filed under `sent/` and `received/` even where transcripts are
+committed: the user agreed (2026-10-17), after asking whether transcripts
+could be the record. Claude Code and Codex commit no transcripts, so for
+most projects the mail folders are the only committed copy; each file is
+one message, word for word, named by time, peer and topic; and it records
+what two projects said to each other, on both sides. Where a runtime
+commits transcripts there's no second copy: a Copious agent pins a mail
+file with `view`, pinned views aren't persisted, and the transcript keeps
+only the call. Since `received/` is never edited, the path is a lasting
+reference.
+
 ## Open
 
 - **Which project a session is in** (@arcana's review, 2026-10-16,
@@ -132,8 +145,6 @@ while the bus is down.
   gets the outer project's inbox and outbox. Arcana's hooks don't walk up.
   @arcana suggests stopping the walk at the top of the enclosing git
   repository.
-- **Whether mail needs `sent/` and `received/` when transcripts are
-  committed** (the user's question, 2026-10-16). Not decided.
 - **`arcana_deliver` writing the `sent/` copy**, the mirror of
   `arcana_receive` writing the inbox file: an agent can send over the bus
   without the outbox, and then nothing reaches `sent/`. Not decided.
