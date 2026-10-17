@@ -167,7 +167,11 @@ on this machine can be reached over Arcana, if the project uses it.
 Installed as the dot-ai plugin, the skill comes with dot-ai-mail's session
 hooks, which also deliver at the end of each turn and tell you when mail
 arrives (without the plugin, `dot-ai-mail hooks` prints them to add by
-hand). Without the tool, the lead delivers by hand:
+hand). Don't deliver by hand where the tool runs, not even a message it
+left in the outbox: tell the user its reason (no project with that
+address, two of them, no `mail/inbox/`) rather than work around it by
+hand. Only where it can't run at all (no `sh`, as on Windows) does the
+lead deliver by hand:
 
 1. Find the recipient's project (Other projects, above). If it isn't
    found, is found twice, or has no `.ai/mail/inbox/`, leave the message in
