@@ -1,7 +1,7 @@
 # Arcana
 
 Arcana is a bus agents can use to message each other live, and across
-machines. For dot-ai it is one way mail travels: projects work without it,
+machines. This guide is for Arcana 0.36.0 or later. For dot-ai it is one way mail travels: projects work without it,
 and with it the folders in `.ai/mail/` work the same.
 
 A project uses Arcana when this machine runs the bus and `arcana setup` has
@@ -24,25 +24,35 @@ ToolSearch "arcana".
   is moved into `.ai/mail/inbox/` by the session-end hook (`Via: arcana`),
   so process the inbox too.
 - **Mail you receive** with `arcana_receive` is gone from the bus, so
-  Arcana (0.35.4 on) writes it to `.ai/mail/inbox/` as the hook would and
-  gives its path as `inbox_file` in the result: process that file like any
-  other. If the result has no `inbox_file` (an older Arcana, or an
-  `inbox_error`), write it yourself before acting on it.
-  Name it by its `timestamp` in UTC, its sender, its subject as a topic
-  and the first 8 characters of its `correlation_id`
+  Arcana writes it to `.ai/mail/inbox/` as the hook would and gives its
+  path as `inbox_file` in the result: process that file like any other.
+  If the result has no `inbox_file` (an `inbox_error`), write it yourself
+  before acting on it. Its id is the message's `id`, the one its sender
+  gave it, or, when it has none, the first 8 characters of its
+  `correlation_id`. Name the file by its `timestamp` in UTC, its sender,
+  its subject as a topic and that id
   (`20261014-022141Z-@arcana--dot-ai-0.3-ec9848b6.md`). Head it `From:`,
-  `To:`, `Sent:` (the timestamp), `Subject:`, `Id:` (the correlation id)
-  and `Via: arcana`, then a blank line and the payload's text, with
-  anything else in the payload after it as a JSON block. A notice from a
-  topic isn't mail: nothing to write.
+  `To:`, `Sent:` (the timestamp), `Subject:`, `Id:` (that id), `Re:` (its
+  `re`, if it has one) and `Via: arcana`, then a blank line and the
+  payload's text, with anything else in the payload after it as a JSON
+  block. A notice from a topic isn't mail: nothing to write.
 - **Sending** is still mail: write the message to the outbox, or to drafts
   when it needs the user, like any other, and deliver it locally
   (the skill's `scripts/dot-ai-mail deliver`) when its recipient is on this machine. A message
   left in the outbox because no project here has its address goes over
   the bus: `arcana_deliver` with `from` set to this project's address, so
-  replies come back to it. Then add `Sent: <date and time> via arcana` to
-  its header lines and move it to `.ai/mail/sent/`. Each message goes one
-  way only, so the recipient never gets it twice.
+  replies come back to it, the file's topic as `subject`, its message (the
+  text after the header lines) as the payload's `text`, and its `Re:`, if
+  it has one, as `re`. Arcana files its own copy under `.ai/mail/sent/`,
+  with `Sent:` and `Id:`, and names it in the result's `sent_file`: then
+  delete the outbox file, so the message is filed once. Only if the result
+  has no `sent_file` (a `sent_error`) add `Sent: <date and time> via
+  arcana` to the file's header lines and move it to `.ai/mail/sent/`
+  yourself. Each message goes one way only, so the recipient never gets
+  it twice.
+- **Answering** a message over the bus: pass its id (its inbox file's
+  `Id:`) as `re` to `arcana_deliver`, or a post's `#topic:<seq>`. With
+  `arcana_publish`, `re` works the same way.
 - **Topics** (`#arcana.releases`) are logs of posts that anyone can read
   at any time, without subscribing: `arcana_inbox address:"#name"
   after:<last seq read>`, which consumes nothing. Subscribing

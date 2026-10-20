@@ -1,6 +1,6 @@
 # dot-ai-mail
 
-*Draft, 2026-10-14; updated 2026-10-17. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
+*Draft, 2026-10-14; updated 2026-10-19. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
 0.1.0; 0.2.0 (2026-10-17) adds `Re:` and `Id:`. Tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
 the dot-ai plugin (`hooks/hooks.json`).*
 
@@ -161,15 +161,17 @@ user decided (2026-10-17, `…-19d7c47a.md` in ipck's `.ai/`) that
 `arcana_deliver` writes the copy itself (arcana 0.35.5, `0521bc2`, not
 released yet), for a message from the project's address to an agent.
 
-## Open
+## Fixed: a message dot-ai-mail can't place was filed twice
 
-- **A message dot-ai-mail can't place, sent over the bus.** Once Arcana
-  files its own copy, the lead's step under "Sending" (move the outbox
-  file to `sent/`) files it a second time, under another name. Arcana
-  could send the outbox file itself (`arcana send FILE`, or a `file`
-  argument to `arcana_deliver`) and file it under its own name; @arcana
-  offered it, and it isn't built. Until then the skill's
-  `references/arcana.md` keeps the step as it is.
+When dot-ai-mail leaves a message in the outbox (its recipient isn't on
+this machine), the lead sends it over the bus. Arcana 0.36.0 files its own
+copy, and the skill then had the lead move the outbox file to `sent/` as
+well, so the message was filed twice under two names. Since 2026-10-19
+(plugin 0.3.1) the lead deletes the outbox file once `arcana_deliver`
+returns `sent_file`. Arcana's copy is named by the time it was sent, not
+the time it was written, and a helper's `By:` line isn't kept. If that
+matters, Arcana could send the outbox file itself (`arcana send FILE`, or
+a `file` argument), keeping its name and header lines; @arcana offered it.
 
 ## Copious
 
