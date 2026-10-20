@@ -1,6 +1,6 @@
 ---
 name: dot-ai
-description: A project's memory and coordination for AI agents, kept in its .ai/ directory, a git worktree of the project repo's orphan `ai` branch (ignored by the code checkout) - .ai/config.yml (the project's handle, its mail address), notes in .ai/memory indexed by .ai/memory/README.md, mail between projects' agents in .ai/mail (drafts, outbox, sent, inbox, received), session transcripts in .ai/transcript, and intake/ and outtake/ for files passed between the user and agents. Use this skill whenever you start or resume work in a repository that has a .ai/ directory; whenever the user says to remember something, make or update a note, record a decision, plan, status or lesson, or asks where things stand; when they say to check mail or message another project's agent; whenever a file shows up in .ai/mail or intake/; when asked to set up .ai/ in a project or move an existing one onto its own branch. Also use it to decide whether a fact belongs in the project's notes, the project's own docs, or your own per-machine memory.
+description: A project's memory and coordination for AI agents, kept in its .ai/ directory, a git worktree of the project repo's orphan `ai` branch (ignored by the code checkout) - .ai/config.yml (the project's handle, its mail address), notes in .ai/memory indexed by .ai/memory/README.md, mail between projects' agents in .ai/mail (drafts, outbox, sent, inbox, received), session transcripts in .ai/transcript, and Intake/ and Outtake/ for files passed between the user and agents. Use this skill whenever you start or resume work in a repository that has a .ai/ directory; whenever the user says to remember something, make or update a note, record a decision, plan, status or lesson, or asks where things stand; when they say to check mail or message another project's agent; whenever a file shows up in .ai/mail or Intake/; when asked to set up .ai/ in a project or move an existing one onto its own branch. Also use it to decide whether a fact belongs in the project's notes, the project's own docs, or your own per-machine memory.
 ---
 
 # .ai/: project memory and coordination for agents
@@ -60,8 +60,8 @@ Each `mail/` folder holds a `.gitkeep` so it exists in a fresh checkout.
 The code's `.gitignore` lists `/.ai/`.
 
 Next to `.ai/`, in the project's own directory, are two folders for the
-user: `intake/`, where the user shares files with you, and `outtake/`, where
-you (usually the lead) share files with the user (Intake and outtake,
+user: `Intake/`, where the user shares files with you, and `Outtake/`, where
+you (usually the lead) share files with the user (Intake and Outtake,
 below). Nothing in them is ever committed.
 
 Run git against the `ai` branch's worktree (`git -C .ai ...`); paths
@@ -78,7 +78,7 @@ inside it are relative to `.ai/` (`memory/release.md`, `mail/inbox/<file>`).
    starts. The index exists so you don't have to read every note.
 3. Look in `.ai/mail/`: process the inbox, and if you are the lead, review
    drafts from helpers and tell the user about drafts waiting for them (all
-   below). Look in `intake/` for files the user left for you.
+   below). Look in `Intake/` for files the user left for you.
 4. If the project uses Arcana (its tools are available, or a session hook
    said it registered you), check the bus too: see `references/arcana.md`.
 5. Treat notes as true when written, not necessarily now. Before acting on
@@ -324,22 +324,26 @@ A notice from a topic (a sender starting with `#`) isn't mail and is never
 filed: read the post it points to if it bears on the work, take what
 matters into the notes, and delete the notice. The topic keeps its own log.
 
-## Intake and outtake
+## Intake and Outtake
 
 Two folders in the project's own directory, next to `.ai/`, are for
 passing files between the user and the agents, and for nothing else:
 
-- **`intake/`**: files the user shares with you. Read them when they bear
+- **`Intake/`**: files the user shares with you. Read them when they bear
   on the task. They are the user's: don't move, edit or delete them unless
   asked.
-- **`outtake/`**: files you share with the user: what they asked you to
+- **`Outtake/`**: files you share with the user: what they asked you to
   make, or what you made for them to take (a report, an export, a patch).
   Tell them it's there. Usually the lead puts files here. Leave them for
   the user to move or delete.
 
 Each holds a `.gitignore` containing only `*`, so git ignores the folder and
 everything in it. If one is missing when you need it, create it that way
-(`mkdir -p outtake && printf '*\n' > outtake/.gitignore`).
+(`mkdir -p Outtake && printf '*\n' > Outtake/.gitignore`).
+
+The capitals make them stand out among the project's own directories. A
+project set up before 2026-10-19 has them in lowercase (`intake/`,
+`outtake/`): use them as they are, and offer to rename them.
 
 ## Committing
 
@@ -369,7 +373,7 @@ and other machines push too. Push the branch by name
 5. Create a `.gitkeep` in `.ai/mail/drafts/`, `mail/outbox/`, `mail/sent/`,
    `mail/inbox/` and `mail/received/`. (The `.gitignore` keeps the contents
    of drafts, outbox and inbox out of commits, but not their `.gitkeep`.)
-   In the project's own directory, create `intake/` and `outtake/`, each
+   In the project's own directory, create `Intake/` and `Outtake/`, each
    with a `.gitignore` containing only `*`.
 6. Seed memory with what you already know that belongs there (status,
    decisions in progress, a coordination note with the projects this one
@@ -392,7 +396,7 @@ For a project whose `.ai/` is still committed with the code:
 3. Move the old directory aside and check the branch out:
    `mv .ai .ai.old && git worktree add .ai ai`. Copy `arcana.token` (if
    any) across from `.ai.old/`, and move anything in its `intake/` to the
-   project's `intake/` (Intake and outtake); they were never committed.
+   project's `Intake/` (Intake and Outtake); they were never committed.
 4. On the branch: add `.gitignore` from `assets/gitignore` and the `mail/`
    folders with their `.gitkeep`. Messages in the old `inbox/` haven't been
    read yet: take them out of git (`git -C .ai rm -r --cached inbox`), move

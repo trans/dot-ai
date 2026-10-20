@@ -3,8 +3,8 @@
 *Draft 0.3, 2026-10-13*. 0.3: mail files are named time first
 (`20261013-190539Z-@arcana--topic.md`), so folders list in order; the inbox
 is machine-local, and mail once read is filed under `mail/received/`;
-`intake/` and `outtake/` move out of `.ai/` into the project's own
-directory. 0.2: mail no longer depends on Arcana. Projects are found by
+`Intake/` and `Outtake/` (lowercase until 2026-10-19) move out of `.ai/`
+into the project's own directory. 0.2: mail no longer depends on Arcana. Projects are found by
 searching for `.ai/` directories and mail is delivered as files, Arcana
 being one transport among others; the project's address comes from the
 top-level `handle`, which replaces `arcana.handle`.

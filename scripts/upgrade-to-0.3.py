@@ -11,8 +11,10 @@ delivery searches, see spec/mail.md):
     its Sent: line's, a draft's its modification time), and
     mail/received/ is added;
   - .gitignore: the intake/ lines go, and mail/inbox/ is ignored;
-  - .ai/intake/ moves to the project's own intake/, with outtake/ beside
-    it, each ignoring itself with a .gitignore of `*`.
+  - .ai/intake/ moves to the project's own Intake/, with Outtake/ beside
+    it, each ignoring itself with a .gitignore of `*`;
+  - the project's intake/ and outtake/, as 0.3 named them before
+    2026-10-19, are renamed Intake/ and Outtake/.
 
 Without --apply it only prints what it would do. With --commit it also
 commits, on a project's ai branch, the files it changed there, when .ai/ is
@@ -58,7 +60,7 @@ COMMIT_MESSAGE = """dot-ai 0.3: top-level handle, mail named time first, receive
 Done by scripts/upgrade-to-0.3.py in the dot.ai repository: config.yml's
 handle and description move to the top level, mail files are renamed time
 first (UTC), mail/received/ is added, the inbox is ignored, and intake/
-leaves .ai/ for the project's own directory.
+leaves .ai/ for the project's own directory, as Intake/.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 """
@@ -335,7 +337,9 @@ def plan_gitignore(p):
     p.stage.append(".gitignore")
 
 
-# intake/ and outtake/
+# Intake/ and Outtake/
+
+FOLDERS = (("intake", "Intake"), ("outtake", "Outtake"))
 
 
 def remove_old_intake(old):
@@ -351,25 +355,46 @@ def make_folder(d):
     (d / ".gitignore").write_text("*\n")
 
 
+def rename_folder(d, to):
+    # In two steps, so it works where names ignore case (macOS, Windows)
+    tmp = d.with_name(f".{d.name}.renaming")
+    d.rename(tmp)
+    tmp.rename(to)
+
+
 def plan_intake(p):
+    names = set(os.listdir(p.path))
+    now = {}  # where each folder is before the steps run
+    for old_name, name in FOLDERS:
+        d, old_d = p.path / name, p.path / old_name
+        if name in names:
+            now[name] = d
+            if old_name in names:
+                p.notes.append(f"both {old_name}/ and {name}/ exist; {old_name}/ left as it is")
+        elif old_name in names and old_d.is_dir() and not old_d.is_symlink():
+            p.step(f"rename {old_name}/ to {name}/", lambda d=old_d, to=d: rename_folder(d, to))
+            now[name] = old_d
+            if not (old_d / ".gitignore").exists():
+                p.step(f"give {name}/ a .gitignore of *, so git ignores it", lambda d=d: make_folder(d))
     old = p.ai / "intake"
     if not old.is_dir() or old.is_symlink():
         return
-    for name in ("intake", "outtake"):
-        d = p.path / name
-        if d.exists() and not d.is_dir():
+    for _, name in FOLDERS:
+        d, cur = p.path / name, now.get(name)
+        if cur is not None and not cur.is_dir():
             p.notes.append(f"{name} exists in the project but isn't a directory; left as is")
-        elif not (d / ".gitignore").exists():
-            if d.is_dir():
+        elif cur is None or not (cur / ".gitignore").exists():
+            if cur is not None:
                 p.notes.append(f"{name}/ already exists in the project; it gets a .gitignore of *")
             p.step(f"add {name}/ to the project, ignoring itself", lambda d=d: make_folder(d))
+    intake = p.path / "Intake"
     for f in sorted(old.iterdir()):
         if f.name == ".gitkeep":
             continue
-        if (p.path / "intake" / f.name).exists():
-            p.notes.append(f".ai/intake/{f.name}: intake/ already has one; left in .ai/intake/")
+        if (now.get("Intake", intake) / f.name).exists():
+            p.notes.append(f".ai/intake/{f.name}: Intake/ already has one; left in .ai/intake/")
             continue
-        p.step(f"move .ai/intake/{f.name} to intake/", lambda f=f: shutil.move(str(f), str(p.path / "intake" / f.name)))
+        p.step(f"move .ai/intake/{f.name} to Intake/", lambda f=f: shutil.move(str(f), str(intake / f.name)))
     p.step("remove .ai/intake/", lambda: remove_old_intake(old))
     if p.tracked("intake/.gitkeep"):
         p.unstage.append("intake/.gitkeep")

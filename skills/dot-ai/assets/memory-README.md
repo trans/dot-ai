@@ -71,12 +71,12 @@ worktree is locked (`cd .ai && git-crypt unlock`).
 `.ai/records/<handle>/` holds the records the runtime curates from them
 (notes, summaries, memories), one file per version, never edited.
 
-## Intake and outtake
+## Intake and Outtake
 
 Two folders in the project's own directory, next to `.ai/`, pass files
-between the user and the agents, and nothing else: `intake/` holds files
+between the user and the agents, and nothing else: `Intake/` holds files
 the user shares (look there when starting a session; don't move, edit or
-delete them unless asked), and `outtake/` holds files an agent, usually the
+delete them unless asked), and `Outtake/` holds files an agent, usually the
 lead, shares with the user. Each holds a `.gitignore` of `*`, so neither is
 ever committed.
 

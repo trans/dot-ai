@@ -77,18 +77,18 @@ mail/inbox/*
 !mail/inbox/.gitkeep
 ```
 
-## The user's folders: `intake/` and `outtake/`
+## The user's folders: `Intake/` and `Outtake/`
 
 Files passed between the user and the agents sit in the project's own
 directory, next to `.ai/`, where the user can get at them:
 
 ```
-intake/      files the user shares with the agents
-outtake/     files an agent (usually the lead) shares with the user
+Intake/      files the user shares with the agents
+Outtake/     files an agent (usually the lead) shares with the user
 ```
 
-That's all they are for. `intake/` is the user's: agents read what's there
-and don't move, edit or delete it unless asked. An agent puts in `outtake/`
+That's all they are for. `Intake/` is the user's: agents read what's there
+and don't move, edit or delete it unless asked. An agent puts in `Outtake/`
 what it makes for the user to take (a report, an export, a patch), and
 leaves it for the user to move or delete.
 
@@ -97,6 +97,12 @@ which keeps the folder and everything in it out of the code repository
 without an entry in the project's own `.gitignore`. Setting up `.ai/`
 creates both, and an agent that finds one missing when it needs it creates
 it the same way.
+
+Their names are capitalized so they stand out among the project's own
+directories, and so they list together where capitals sort first. Before
+2026-10-19 they were `intake/` and `outtake/`; a tool that finds those
+uses them, and renaming them changes nothing else, since they're never
+committed.
 
 ## This machine's side: `.var/ai/`
 
