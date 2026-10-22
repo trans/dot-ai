@@ -50,6 +50,7 @@ their notes). It writes to them only by mail.
   .gitignore     keeps the machine-local files below out of commits
   config.yml     settings for agents and tools (Config)
   arcana.token   Arcana's owner token, if the project uses it    machine-local
+  arcana.key     the project's private key, if it uses Arcana    machine-local
   memory/        notes agents keep (Memory)
     README.md    the index
   mail/          messages between agents (Mail)
@@ -69,6 +70,7 @@ The branch's `.gitignore`:
 
 ```gitignore
 arcana.token
+arcana.key
 mail/drafts/*
 !mail/drafts/.gitkeep
 mail/outbox/*

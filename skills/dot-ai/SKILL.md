@@ -39,9 +39,10 @@ agents' working space.
 
 ```
 .ai/                a worktree of the repo's `ai` branch
-  .gitignore        ignores the contents of mail/drafts, mail/outbox and mail/inbox, and arcana.token
+  .gitignore        ignores the contents of mail/drafts, mail/outbox and mail/inbox, arcana.token and arcana.key
   config.yml        settings agents and tools read: handle, description, mail.review, ...
   arcana.token      Arcana's owner token, if the project uses Arcana; machine-local, never committed
+  arcana.key        the project's private key, if it uses Arcana; machine-local, never committed
   memory/
     README.md       the index: one row per note, plus the conventions
     <topic>.md      one note per topic: handoff.md, release.md, ...
@@ -394,8 +395,8 @@ For a project whose `.ai/` is still committed with the code:
 2. In the code checkout: `git rm -r --cached .ai`, add `/.ai/` to
    `.gitignore`, and commit. The old notes stay in the code's history.
 3. Move the old directory aside and check the branch out:
-   `mv .ai .ai.old && git worktree add .ai ai`. Copy `arcana.token` (if
-   any) across from `.ai.old/`, and move anything in its `intake/` to the
+   `mv .ai .ai.old && git worktree add .ai ai`. Copy `arcana.token` and
+   `arcana.key` (if any) across from `.ai.old/`, and move anything in its `intake/` to the
    project's `Intake/` (Intake and Outtake); they were never committed.
 4. On the branch: add `.gitignore` from `assets/gitignore` and the `mail/`
    folders with their `.gitkeep`. Messages in the old `inbox/` haven't been

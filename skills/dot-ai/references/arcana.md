@@ -62,5 +62,7 @@ ToolSearch "arcana".
   copied into `.ai/mail/`. A notice still unread when a session ends lands
   in `.ai/mail/inbox/`; read the post if it matters and delete the notice.
 - **Services on the bus** (a tool, `help`) aren't mail: call them directly.
-- **`.ai/arcana.token`** is the owner token the hooks create: machine-local,
-  listed in `.ai/.gitignore`. Never commit it.
+- **`.ai/arcana.token`** is the owner token the hooks create, and
+  **`.ai/arcana.key`** the project's private key (Arcana 0.37): both
+  machine-local, listed in `.ai/.gitignore`. Never commit them; the key
+  above all, since whoever has it can sign as the project.

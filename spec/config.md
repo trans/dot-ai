@@ -55,7 +55,8 @@ the person's own name and email.
 A mail transport may keep machine-local files in `.ai/`, listed in the
 branch's `.gitignore`. Arcana's session hooks keep `.ai/arcana.token`, the
 owner token proving to this machine's bus that the registration under the
-project's address is this project's. Never commit them.
+project's address is this project's, and `.ai/arcana.key`, the project's
+private key, which proves the same by signing. Never commit them.
 
 ## Changing the schema
 
