@@ -13,6 +13,7 @@ description: >        # what the project's agent does, for other agents
   The agent for Oyl, a ...
 mail:
   review: triage      # or "all": every outbound message waits for approval
+  follow: ["#arcana.releases"]  # topics whose new posts the agent is told of
 transcript:
   encrypt: false      # true: also encrypt committed transcripts (git-crypt)
   redaction: standard # or "strict"
@@ -29,6 +30,7 @@ copious:              # one tool's own settings, under its name
 | `handle` | string | the directory's name | The project's handle (see [Identity](identity.md)): short, lowercase, letters, digits and `-`, starting with a letter. Its agents' mail address is `@` plus it (`@oyl`), whatever carries the mail. It may be written with the `@`, quoted then: YAML reads an unquoted leading `@` as a reserved indicator. |
 | `description` | string | none | One or two sentences on what the project's agent does, for other agents (a directory listing, an overseer's view). |
 | `mail.review` | string | `triage` | Which outbound mail waits for the user (see [Mail](mail.md)). `triage`: the lead agent decides per message. `all`: every message waits. |
+| `mail.follow` | list of strings | none | The topics the project follows, by address (`#arcana.releases`, quoted: YAML reads an unquoted `#` as a comment). The carrier tells its agents of new posts in them (see [Mail](mail.md)). |
 | `transcript.redaction` | string | `standard` | What the AI pass removes before transcripts are committed: `standard` or `strict` (see [Protection](protection.md)). A tool that doesn't know the level given must use the strictest it knows. |
 | `transcript.encrypt` | boolean | `false` | Also encrypt committed transcripts with git-crypt (see [Protection](protection.md)). |
 | `users.<handle>` | map | none | A person working on the project, by handle (see [Identity](identity.md)): `name`; `emails`, every address they commit with; and `aliases`, handles they used before this one. Each person adds their own entry. |
@@ -47,12 +49,13 @@ are read only from `.ai/config.yml`: they are agreements between everyone
 working on the project, not one machine's choice.
 
 Per-person settings that hold across projects belong in git config, not
-here: the machine's name (`ai.machine`, see [Identity](identity.md)), and
-the person's own name and email.
+here: the machine's name (`ai.machine`, see [Identity](identity.md)), where
+to look for projects (`ai.path`) and what carries their mail
+(`ai.carrier`, see [Mail](mail.md)), and the person's own name and email.
 
-## Transports' own files
+## Carriers' own files
 
-A mail transport may keep machine-local files in `.ai/`, listed in the
+A mail carrier may keep machine-local files in `.ai/`, listed in the
 branch's `.gitignore`. Arcana's session hooks keep `.ai/arcana.token`, the
 owner token proving to this machine's bus that the registration under the
 project's address is this project's, and `.ai/arcana.key`, the project's

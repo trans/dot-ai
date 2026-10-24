@@ -59,6 +59,8 @@ their notes). It writes to them only by mail.
     sent/        what was sent
     inbox/       what arrived, not yet read                      machine-local
     received/    what arrived and was read
+    following    the project's place in each topic it follows    machine-local
+  topics/        posts, in the topic home only (Mail: Topics)    machine-local
   transcript/    session transcripts, protected (Transcripts)
   records/       curated records, one file per version (Records)
 ```
@@ -77,6 +79,8 @@ mail/outbox/*
 !mail/outbox/.gitkeep
 mail/inbox/*
 !mail/inbox/.gitkeep
+mail/following
+topics/
 ```
 
 ## The user's folders: `Intake/` and `Outtake/`
@@ -130,7 +134,8 @@ of them.
 |---|---|---|
 | `config.yml` | people, by hand | yes; no tool rewrites it, so its comments survive |
 | `memory/` | agents | yes, the notes are kept current |
-| `mail/` | agents, delivery processes | `sent/` and `received/` never; the rest move between folders |
+| `mail/` | agents, the carrier | `sent/` and `received/` never; the rest move between folders |
+| `topics/` | the carrier | never; posts are only added, or dropped oldest first |
 | `transcript/` | runtimes | never; files only grow |
 | `records/` | runtimes | never; each change is a new file |
 
