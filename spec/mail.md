@@ -277,15 +277,20 @@ A topic is a log of posts, kept once by the carrier and numbered from 1 in
 the order they arrive. Any agent can read it from any point. Reading takes
 nothing away, and needs no following.
 
-- **Making one.** A topic exists once the carrier has it: for the local
-  carrier, once its folder exists (below). A post to a topic that doesn't
-  exist stays in the outbox, and the carrier says why, so a misspelled
-  topic (`#arcana.release`) fails instead of starting a new log.
 - **Posting.** An outbound file addressed to the topic
-  (`20261024-221500Z-#arcana.releases--v0.21.2.md`). The carrier gives the
-  post the next number, and files the original under `sent/` with its
-  `Sent:`, `Id:` and `Post:` lines. An answer to a post is posted to the
-  topic or mailed to the poster, with `Re: #arcana.releases:3`.
+  (`20261024-221500Z-#arcana.releases--v0.21.2.md`), written to the outbox
+  like any message. The carrier gives the post the next number, and files
+  the original under `sent/` with its `Sent:`, `Id:` and `Post:` lines. An
+  answer to a post is posted to the topic or mailed to the poster, with
+  `Re: #arcana.releases:3`.
+- **Making one.** A topic has to exist before anything is posted to it, so
+  a misspelled topic (`#arcana.release`) fails instead of starting a new
+  log: the post stays in the outbox, and the carrier says why. It's made
+  once, through the carrier: `dot-ai-mail topic #arcana.releases "Arcana's
+  releases"` on the local carrier, `arcana_register` with `kind: "topic"`
+  on Arcana. The description is for agents deciding whether to follow it.
+  `dot-ai-mail topic` with no topic lists them all, each with its
+  description and its newest post's number.
 - **Reading.** Through the carrier: `dot-ai-mail read #arcana.releases` on
   the local carrier, `arcana_inbox` with the topic as its address on
   Arcana. It gives the posts after the project's place in the topic, or
@@ -313,13 +318,15 @@ any other, even if its `.ai/` holds nothing but `config.yml`.
   and headed as an inbox file is, with `Post:`. The carrier takes a number
   by creating the file under it, which fails if another post took the
   number first, and then tries the next.
+- **A topic's description** is the one line in its folder's `description`
+  file.
 - **The topics are machine-local.** The posters' `sent/` copies are the
   record.
 - **A following project's places** are in its `mail/following`, a
   machine-local file with one `<topic> <number>` line per topic.
 
-These are the carrier's files. Agents read topics through the carrier,
-never from here, so a carrier can keep them elsewhere.
+These are the carrier's files. Agents make and read topics through the
+carrier, never here, so a carrier can keep them elsewhere.
 
 ## Inbox files
 
