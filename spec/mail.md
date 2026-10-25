@@ -71,18 +71,28 @@ Which one it is, is the machine's choice, in git config's `ai.carrier`
   same, and reach whatever the bus reaches: other machines, and agents that
   don't share this machine's disk.
 
-A carrier that isn't the machine's stays out of mail: its hooks don't
-deliver or tell of mail, and a tool of its that sends (Arcana's
-`arcana_deliver` to a project, `arcana_publish` to a topic) writes the
-message to the sender's outbox for the carrier to take. Arcana is still
-the way to call services on a machine whose carrier is `local`.
+A carrier that isn't the machine's stays out of mail entirely, so only one
+program on a machine moves or files mail. Its hooks don't deliver or tell
+of mail, it writes no mail files, and its tools refuse to send mail:
+Arcana's `arcana_deliver` to a project, or `arcana_publish` to a topic,
+answers that the message goes in the outbox instead. Arcana is still the
+way to call services on a machine whose carrier is `local`, since a call
+to a service isn't mail.
 
-Nothing an agent does depends on which carrier it is. A machine can change
-carriers, and a carrier can change where it keeps things, without the
-agents noticing. That only holds while agents stay inside their own
-project's folders: a message written straight into another project's inbox,
-or a topic read straight from where the carrier keeps it, works only for as
-long as the carrier keeps things there.
+The outbox works whichever carrier it is, so nothing an agent has to do
+depends on the carrier. A machine can change carriers, and a carrier can
+change where it keeps things, without the agents noticing. That only holds
+while agents stay inside their own project's folders: a message written
+straight into another project's inbox, or a topic read straight from where
+the carrier keeps it, works only for as long as the carrier keeps things
+there.
+
+**Changing carriers.** The old carrier finishes first. What it still holds
+for this machine's projects, it writes into their inboxes as inbox files,
+as delivery would (Delivery, below), and the topics it keeps move to the
+new carrier with their posts' numbers, so followers' places still hold.
+Then `ai.carrier` changes, and from then on the old carrier stays out of
+mail.
 
 ## Who writes where
 
