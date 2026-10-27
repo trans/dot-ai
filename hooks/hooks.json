@@ -1,5 +1,5 @@
 {
-  "description": "dot-ai-mail: deliver .ai/mail/outbox to the projects on this machine, and tell the agent when mail is waiting",
+  "description": "dot-ai-mail: deliver .ai/mail/outbox to the projects on this machine, and tell the agent when mail is waiting, and when mail it sent has been read",
   "hooks": {
     "SessionStart": [
       {
@@ -18,6 +18,17 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai-mail\" hook stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai-mail\" hook prompt",
             "timeout": 10
           }
         ]

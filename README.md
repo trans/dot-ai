@@ -25,7 +25,7 @@ Code and Codex, which teaches agents to work this way.
 
 The plugin brings the dot-ai skill and dot-ai-mail's session hooks, which
 deliver mail between the projects on this machine and tell the agent when
-mail is waiting. In Claude Code:
+mail is waiting and when its mail has been read. In Claude Code:
 
 ```sh
 claude plugin marketplace add trans/dot-ai
@@ -76,7 +76,7 @@ runs agents and writes their transcripts.
 - **dot-ai-mail** (`skills/dot-ai/scripts/dot-ai-mail`, designed in
   `notes/dot-ai-mail.md`) is the delivery tool the Mail spec describes: a
   shell script that delivers outboxes on this machine and tells agents
-  when mail is waiting. The plugin runs it from `hooks/hooks.json`;
+  when mail is waiting and when their mail has been read. The plugin runs it from `hooks/hooks.json`;
   without the plugin, `dot-ai-mail hooks` prints the entries to add to
   each tool's settings.
 - **The plugin's manifests** are `.claude-plugin/` (Claude Code's plugin

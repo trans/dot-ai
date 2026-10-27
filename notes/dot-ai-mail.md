@@ -2,12 +2,13 @@
 
 *Draft, 2026-10-14; updated 2026-10-27. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
 0.1.0; 0.2.0 (2026-10-17) adds `Re:` and `Id:`; 0.3.0 (2026-10-27) adds
-topics and `ai.carrier`. Tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
+topics, `ai.carrier` and receipts. Tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
 the dot-ai plugin (`hooks/hooks.json`).*
 
 The local carrier of [Mail](../spec/mail.md): it delivers each project's
 outbox on this machine, keeps the topics, and tells agents when mail or
-posts are waiting, so the lead no longer delivers by hand. It needs no
+posts are waiting and when their mail has been read, so the lead no longer
+delivers by hand. It needs no
 server and nothing beyond the file system, and it doesn't need Arcana.
 
 ## Form
@@ -35,15 +36,16 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 | `dot-ai-mail topic [TOPIC DESCRIPTION]` | Makes a topic with a one-line description, or, alone, lists the topics with their number of posts and descriptions. A topic is given as `'#name'` (quoted, or the shell takes it for a comment) or `name`. |
 | `dot-ai-mail read TOPIC [--after N] [DIR]` | Prints the posts after the project's place in the topic (after post `N` with `--after`), oldest first, each under a `==> <file> <==` line, and moves the place on to the last one shown. |
 | `dot-ai-mail find [ADDRESS]` | Where an address's project is, or every project found with its address: to see why something wasn't delivered. |
-| `dot-ai-mail hook EVENT [--agent claude\|codex]` | What the session hooks run (below). The plugin's hooks name no agent: `PLUGIN_ROOT` set means Codex (Claude Code sets only `CLAUDE_*`), else `CLAUDE_PROJECT_DIR` set means Claude Code, else Codex. |
+| `dot-ai-mail hook EVENT [--agent claude\|codex]` | What the session hooks run (below): `session-start`, `stop`, `prompt`, `session-end`. The plugin's hooks name no agent: `PLUGIN_ROOT` set means Codex (Claude Code sets only `CLAUDE_*`), else `CLAUDE_PROJECT_DIR` set means Claude Code, else Codex. |
 | `dot-ai-mail hooks` | Prints the hook entries to add to Claude Code's and Codex's settings, for use without the plugin. It doesn't edit them: JSON is the one thing `sh` can't safely rewrite. |
 
 ## Hooks
 
 - **`session-start`:** deliver, then add to the agent's context everything
   in `.ai/mail/inbox/` (oldest first, by name), any message left in the
-  outbox with the reason, what it delivered, and how many posts each topic
-  in `mail.follow` has after the project's place.
+  outbox with the reason, what it delivered, how many posts each topic
+  in `mail.follow` has after the project's place, and the receipts
+  (below).
 - **`stop`** (every time the agent would finish a turn): deliver, then, if
   there's anything this session hasn't been told of (new inbox files, a
   message newly left in the outbox, messages it just delivered, which the
@@ -54,6 +56,12 @@ server and nothing beyond the file system, and it doesn't need Arcana.
   `$XDG_RUNTIME_DIR/dot-ai-mail/<session id>` (or under `$TMPDIR`), so a
   message the agent leaves for later never loops it, and
   `stop_hook_active` isn't needed. Files older than a week are removed.
+  The receipts are told too, but only when there's something else to
+  tell.
+- **`prompt`** (`UserPromptSubmit`, as the user's prompt goes to the
+  agent): only the receipts, added to the agent's context. It doesn't
+  deliver, so it stays quick on every prompt. Codex has the same hook,
+  with the same output.
 - **`session-end`:** deliver, quietly.
 - A hook never stops a session: anything that goes wrong is one line of
   output and exit 0 (2 only to keep the agent going). It reads
@@ -112,6 +120,32 @@ sender's):
   a flow list on the `follow:` line or a block list of `- ` items below
   it, each quoted or not. The hooks tell of an entry that isn't a topic,
   or a topic that doesn't exist, once per session.
+
+## Receipts
+
+Asked for by @mj for the user (2026-10-27, after three messages sat on
+the bus for an agent that had gone offline): a way to know whether a
+message was read, without looking in the other project's folders. A
+command (`dot-ai-mail sent`, listing where each message is now) was the
+first idea; the user preferred being told, without running anything.
+
+- **Waiting:** each message `deliver` hands to a project (not a post)
+  gets a line in the outbox's `.receipts`: id, address, the recipient's
+  project and the outbox name, tab-separated. The project is kept so
+  checking needs no search of `ai.path`. The outbox's ignore rule
+  (`mail/outbox/*`) already keeps the file out of commits, which matters:
+  it holds local paths.
+- **Checking:** a file ending in `-<id>.md` in the recipient's
+  `received/` means read; one in its inbox means still waiting; neither
+  means it left the inbox unfiled; no `.ai/mail/` at the project means it
+  moved. Each but the waiting is told once (`@oyl read <name>`) and its
+  line dropped; the file goes when the last one is.
+- **Never a turn of their own:** the Stop hook can only add text by keeping
+  the agent going, so receipts wait for the `prompt` hook, a session
+  start, or a Stop that has something else to say.
+- **The outbox's lock** guards the rewrite against a delivery appending at
+  the same time; the `prompt` hook doesn't wait for it, and leaves the
+  receipts for next time.
 
 ## The carrier
 

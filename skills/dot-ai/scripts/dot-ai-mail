@@ -27,7 +27,8 @@ dot-ai-mail: deliver .ai/ mail between the projects on this machine
   dot-ai-mail find [ADDRESS]   where ADDRESS's project is, or every project found
   dot-ai-mail hook EVENT [--agent claude|codex]
                                what the session hooks run: session-start, stop,
-                               session-end (reads the hook's JSON on stdin)
+                               prompt, session-end (reads the hook's JSON on
+                               stdin)
   dot-ai-mail hooks            print the hook entries for Claude Code and Codex,
                                for use without the dot-ai plugin
   dot-ai-mail version
@@ -499,10 +500,52 @@ deliver() {
     if [ -n "$post" ]; then
       printf 'posted: %s to %s as post %s\n' "$name" "$to" "$post"
     else
+      # Its receipt waits until the recipient files it under received/
+      grep -q "^$id$TAB" "$box/.receipts" 2>/dev/null ||
+        printf '%s\t%s\t%s\t%s\n' "$id" "$to" "$dir" "$name" >>"$box/.receipts"
       printf 'delivered: %s to %s\n' "$name" "$to"
     fi
   done
 
+  rmdir "$LOCK" 2>/dev/null
+  LOCK=
+}
+
+# The receipts for the mail the project at ROOT sent: each message delivered
+# to a project waits in the outbox's .receipts ("id<TAB>address<TAB>its
+# project<TAB>name" lines) until its recipient files it under received/.
+# Prints a line for each one read, or one that can't be any more, and drops
+# it. Left for next time while a delivery holds the outbox.
+receipts() {
+  box=$1/.ai/mail/outbox
+  [ -s "$box/.receipts" ] || return 0
+  lock "$box/.delivering" || return 0
+  LOCK=$box/.delivering
+  tmp=$box/.receipts.$$
+  : >"$tmp"
+  while IFS=$TAB read -r id to dir name; do
+    [ -n "$name" ] || continue
+    st=gone
+    if [ ! -d "$dir/.ai/mail" ]; then
+      st=moved
+    else
+      for x in "$dir/.ai/mail/received/"*"-$id.md"; do [ -e "$x" ] && st=read && break; done
+      if [ "$st" = gone ]; then
+        for x in "$dir/.ai/mail/inbox/"*"-$id.md"; do [ -e "$x" ] && st=waiting && break; done
+      fi
+    fi
+    case $st in
+      waiting) printf '%s\t%s\t%s\t%s\n' "$id" "$to" "$dir" "$name" >>"$tmp" ;;
+      read) printf '  %s read %s\n' "$to" "$name" ;;
+      gone) printf '  %s took %s out of its inbox without filing it under received/\n' "$to" "$name" ;;
+      moved) printf '  %s: no telling whether it read %s, since its project is no longer at %s\n' "$to" "$name" "$dir" ;;
+    esac
+  done <"$box/.receipts"
+  if [ -s "$tmp" ]; then
+    mv "$tmp" "$box/.receipts"
+  else
+    rm -f "$tmp" "$box/.receipts"
+  fi
   rmdir "$LOCK" 2>/dev/null
   LOCK=
 }
@@ -645,8 +688,8 @@ cmd_hook() {
     shift
   done
   case $event in
-    session-start | stop | session-end) ;;
-    *) die "usage: dot-ai-mail hook session-start|stop|session-end [--agent claude|codex]" ;;
+    session-start | stop | prompt | session-end) ;;
+    *) die "usage: dot-ai-mail hook session-start|stop|prompt|session-end [--agent claude|codex]" ;;
   esac
   # Without --agent (the plugin's hooks): Codex sets PLUGIN_ROOT, Claude Code
   # doesn't; Claude Code sets CLAUDE_PROJECT_DIR (Codex may too)
@@ -663,14 +706,37 @@ cmd_hook() {
   session=$(json_field session_id | tr -c 'A-Za-z0-9_.-' '_')
   cwd=$(json_field cwd)
   quiet() {
-    [ "$agent" = codex ] && [ "$event" = stop ] && printf '{}\n'
+    [ "$agent" = codex ] && case $event in stop | prompt) printf '{}\n' ;; esac
     exit 0
+  }
+  # Adds what $TMP/say holds to the agent's context, without keeping it going
+  context() {
+    printf '{"hookSpecificOutput":{"hookEventName":"%s","additionalContext":%s}}\n' \
+      "$1" "$(json_str <"$TMP/say")"
+    exit 0
+  }
+  # The receipts, under a line saying what they are
+  told_receipts() {
+    receipts "$root" >"$TMP/read"
+    [ -s "$TMP/read" ] || return 0
+    {
+      printf 'Receipts for mail this project sent (its copies are in .ai/mail/sent/):\n'
+      cat "$TMP/read"
+    } >>"$TMP/say"
   }
 
   root=$(project_root "${CLAUDE_PROJECT_DIR:-${cwd:-.}}") || quiet
   [ -d "$root/.ai/mail" ] || quiet
   [ "$(carrier)" = local ] || quiet
   tmpdir
+  : >"$TMP/say"
+  # At each prompt, only the receipts: they never keep the agent going on
+  # their own, so they wait for the next turn
+  if [ "$event" = prompt ]; then
+    told_receipts
+    [ -s "$TMP/say" ] || quiet
+    context UserPromptSubmit
+  fi
   deliver "$root" >"$TMP/out"
   [ "$event" = session-end ] && exit 0
 
@@ -682,7 +748,6 @@ cmd_hook() {
   [ "$event" = session-start ] && find "$rundir" -type f -mtime +7 -exec rm -f {} + 2>/dev/null
 
   # At session start, everything; at Stop, only what this session hasn't heard
-  : >"$TMP/say"
   : >"$TMP/new"
   untold() {
     [ "$event" = session-start ] || ! grep -qxF "$1" "$told"
@@ -746,11 +811,11 @@ cmd_hook() {
     } >>"$TMP/say"
   fi
 
+  # The receipts too, at session start or when Stop has something to say
+  # anyway
+  [ "$event" = session-start ] || [ -s "$TMP/say" ] && told_receipts
   if [ ! -s "$TMP/say" ]; then quiet; fi
-  if [ "$event" = session-start ]; then
-    printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":%s}}\n' "$(json_str <"$TMP/say")"
-    exit 0
-  fi
+  [ "$event" = session-start ] && context SessionStart
   if [ "$agent" = codex ]; then
     printf '{"decision":"block","reason":%s}\n' "$(json_str <"$TMP/say")"
     exit 0
@@ -769,12 +834,14 @@ Claude Code: merge these into "hooks" in ~/.claude/settings.json
 
   "SessionStart": [{"hooks": [{"type": "command", "command": "$self hook session-start --agent claude"}]}],
   "Stop": [{"hooks": [{"type": "command", "command": "$self hook stop --agent claude"}]}],
+  "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "$self hook prompt --agent claude"}]}],
   "SessionEnd": [{"hooks": [{"type": "command", "command": "$self hook session-end --agent claude"}]}]
 
 Codex: merge these into "hooks" in ~/.codex/hooks.json
 
   "SessionStart": [{"matcher": "startup|resume|clear", "hooks": [{"type": "command", "command": "$self hook session-start --agent codex", "timeout": 10}]}],
   "Stop": [{"hooks": [{"type": "command", "command": "$self hook stop --agent codex", "timeout": 10}]}],
+  "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "$self hook prompt --agent codex", "timeout": 10}]}],
   "SessionEnd": [{"hooks": [{"type": "command", "command": "$self hook session-end --agent codex", "timeout": 10}]}]
 
 Each event's list may already hold other hooks (Arcana's, say): add these

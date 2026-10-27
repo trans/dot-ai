@@ -168,11 +168,42 @@ check "follow: a new post keeps Claude going once" '[ $? -eq 2 ] && grep -q "4 n
 printf 'handle: "@beta"\nmail:\n  follow: ["#news"]  # flow\n' >"$P/beta/.ai/config.yml"
 check "follow: a flow list, after the place" 'hook stop b1 "$P/beta" claude 2>&1 | grep -q "1 new post in #news"'
 
+# Receipts
+project rho 'handle: rho'
+project sigma 'handle: sigma'
+R=$P/rho/.ai/mail S=$P/sigma/.ai/mail
+printf 'One.\n' >"$R/outbox/20261016-100000Z-@sigma--one.md"
+printf 'Two.\n' >"$R/outbox/20261016-100100Z-@sigma--two.md"
+printf 'Three.\n' >"$R/outbox/20261016-100200Z-@sigma--three.md"
+printf 'Post.\n' >"$R/outbox/20261016-100300Z-#news--rho.md"
+(cd "$P/rho" && $SH "$M" deliver >/dev/null)
+check "receipts: one waits for each message, none for a post" '[ "$(wc -l <"$R/outbox/.receipts" | tr -d " ")" = 3 ]'
+check "prompt: quiet while nothing is read" '[ -z "$(hook prompt r1 "$P/rho" claude)" ] && [ "$(hook prompt r1 "$P/rho" codex)" = "{}" ]'
+mv "$S/inbox/"*--one-*.md "$S/received/"
+rm "$S/inbox/"*--two-*.md
+printf 'deadbeef\t@ghost\t%s\t20261016-100500Z-@ghost--boo.md\n' "$T/nowhere" >>"$R/outbox/.receipts"
+mkdir "$R/outbox/.delivering"
+check "prompt: quiet while a delivery runs" '[ -z "$(hook prompt r1 "$P/rho" claude)" ] && [ "$(wc -l <"$R/outbox/.receipts" | tr -d " ")" = 4 ]'
+rmdir "$R/outbox/.delivering"
+printf 'Four.\n' >"$R/outbox/20261016-100400Z-@sigma--four.md"
+out=$(hook prompt r1 "$P/rho" claude)
+check "prompt: tells of a message read" 'printf "%s" "$out" | grep -q "^{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Receipts for mail this project sent" && printf "%s" "$out" | grep -q "@sigma read 20261016-100000Z-@sigma--one.md"'
+check "prompt: of one taken out unfiled, and one whose project is gone" 'printf "%s" "$out" | grep -q "@sigma took 20261016-100100Z-@sigma--two.md out of its inbox" && printf "%s" "$out" | grep -q "@ghost: no telling whether it read"'
+check "prompt: each told once, and nothing delivered" '[ -z "$(hook prompt r1 "$P/rho" claude)" ] && [ "$(wc -l <"$R/outbox/.receipts" | tr -d " ")" = 1 ] && [ -f "$R/outbox/20261016-100400Z-@sigma--four.md" ]'
+mv "$S/inbox/"*--three-*.md "$S/received/"
+rm "$R/outbox/20261016-100400Z-@sigma--four.md"
+check "stop: a receipt alone doesn't keep Claude going" 'hook stop r2 "$P/rho" claude 2>/dev/null && grep -q -- "--three.md$" "$R/outbox/.receipts"'
+printf 'Four.\n' >"$R/outbox/20261016-100400Z-@sigma--four.md"
+hook stop r2 "$P/rho" claude 2>"$T/err"
+check "stop: told with something else to say" '[ $? -eq 2 ] && grep -q "sent 1 message" "$T/err" && grep -q "@sigma read 20261016-100200Z-@sigma--three.md" "$T/err" && ! grep -q -- "--three.md$" "$R/outbox/.receipts"'
+mv "$S/inbox/"*--four-*.md "$S/received/"
+check "session-start: tells of receipts" 'hook session-start r3 "$P/rho" claude | grep -q "@sigma read 20261016-100400Z-@sigma--four.md" && [ ! -e "$R/outbox/.receipts" ]'
+
 # Another carrier: dot-ai-mail stays out of mail
 git config --file "$T/gitconfig" ai.carrier arcana
 printf 'x\n' >"$A/outbox/20261015-230000Z-@beta--carried.md"
 check "carrier: deliver stays out" '! (cd "$P/alpha" && $SH "$M" deliver 2>/dev/null) && [ -f "$A/outbox/20261015-230000Z-@beta--carried.md" ]'
-check "carrier: the hooks are quiet" 'hook stop a9 "$P/alpha" claude 2>/dev/null && [ -f "$A/outbox/20261015-230000Z-@beta--carried.md" ]'
+check "carrier: the hooks are quiet" 'hook stop a9 "$P/alpha" claude 2>/dev/null && [ -z "$(hook prompt a9 "$P/alpha" claude)" ] && [ -f "$A/outbox/20261015-230000Z-@beta--carried.md" ] && [ -s "$A/outbox/.receipts" ]'
 git config --file "$T/gitconfig" --unset ai.carrier
 
 [ "$failed" = 0 ] && printf 'all passed\n'

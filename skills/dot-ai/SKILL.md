@@ -181,8 +181,9 @@ to the outbox, run it with `sh` by its path and the command `deliver`
 filed under `sent/`. It prints a line for each message: delivered (or
 posted, for a topic), or left in the outbox and why. Installed as the
 dot-ai plugin, the skill comes with dot-ai-mail's session hooks, which
-also deliver at the end of each turn and tell you when mail arrives
-(without the plugin, `dot-ai-mail hooks` prints them to add by hand).
+also deliver at the end of each turn and tell you when mail arrives, and
+when mail you sent has been read (without the plugin, `dot-ai-mail hooks`
+prints them to add by hand).
 Don't deliver by hand where the tool runs, not even a message it left in
 the outbox, and don't send it some other way (Arcana's `arcana_deliver`
 included): tell the user its reason (no project with that address, two of
@@ -207,6 +208,18 @@ by hand:
 `sent/` is committed and never edited: it's the user's record of exactly
 what was said. When the user asks what went out, point them there.
 Otherwise mention routine mail briefly, by count, and held drafts by name.
+
+**Receipts.** A message has been read once its recipient files it under
+its `received/`. The hooks tell you so, under "Receipts for mail this
+project sent", naming your copy under `sent/` (`@oyl read
+20261010-180322Z-@oyl--schema.md`), and also when a recipient took a
+message out of its inbox without filing it. They come at the next prompt
+or session start, never keeping you going on their own. Nothing needs
+doing unless you were waiting on that message; tell the user when they
+asked about it. To see whether a message was read, wait for its receipt
+rather than looking in the recipient's folders. The outbox's hidden
+`.receipts` is dot-ai-mail's list of the messages still waiting for one:
+leave it alone.
 
 **Machine-local:** drafts, the outbox and the inbox aren't committed.
 Pushed, a message in the outbox could go out twice, once from each
