@@ -1,12 +1,13 @@
 # dot-ai-mail
 
-*Draft, 2026-10-14; updated 2026-10-19. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
-0.1.0; 0.2.0 (2026-10-17) adds `Re:` and `Id:`. Tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
+*Draft, 2026-10-14; updated 2026-10-27. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
+0.1.0; 0.2.0 (2026-10-17) adds `Re:` and `Id:`; 0.3.0 (2026-10-27) adds
+topics and `ai.carrier`. Tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
 the dot-ai plugin (`hooks/hooks.json`).*
 
-A small program that does what [Mail](../spec/mail.md) asks of a delivery
-tool: it delivers each project's outbox on this machine and tells agents
-when mail is waiting, so the lead no longer delivers by hand. It needs no
+The local carrier of [Mail](../spec/mail.md): it delivers each project's
+outbox on this machine, keeps the topics, and tells agents when mail or
+posts are waiting, so the lead no longer delivers by hand. It needs no
 server and nothing beyond the file system, and it doesn't need Arcana.
 
 ## Form
@@ -31,6 +32,8 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 |---|---|
 | `dot-ai-mail deliver [DIR]` | Delivers everything in the outbox of the project at or above `DIR` (default: here). One line per message: delivered, or left in the outbox and why. |
 | `dot-ai-mail check [DIR]` | Lists the inbox, oldest first. Exits 1 when it's empty, for scripts. |
+| `dot-ai-mail topic [TOPIC DESCRIPTION]` | Makes a topic with a one-line description, or, alone, lists the topics with their number of posts and descriptions. A topic is given as `'#name'` (quoted, or the shell takes it for a comment) or `name`. |
+| `dot-ai-mail read TOPIC [--after N] [DIR]` | Prints the posts after the project's place in the topic (after post `N` with `--after`), oldest first, each under a `==> <file> <==` line, and moves the place on to the last one shown. |
 | `dot-ai-mail find [ADDRESS]` | Where an address's project is, or every project found with its address: to see why something wasn't delivered. |
 | `dot-ai-mail hook EVENT [--agent claude\|codex]` | What the session hooks run (below). The plugin's hooks name no agent: `PLUGIN_ROOT` set means Codex (Claude Code sets only `CLAUDE_*`), else `CLAUDE_PROJECT_DIR` set means Claude Code, else Codex. |
 | `dot-ai-mail hooks` | Prints the hook entries to add to Claude Code's and Codex's settings, for use without the plugin. It doesn't edit them: JSON is the one thing `sh` can't safely rewrite. |
@@ -39,11 +42,13 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 
 - **`session-start`:** deliver, then add to the agent's context everything
   in `.ai/mail/inbox/` (oldest first, by name), any message left in the
-  outbox with the reason, and what it delivered.
+  outbox with the reason, what it delivered, and how many posts each topic
+  in `mail.follow` has after the project's place.
 - **`stop`** (every time the agent would finish a turn): deliver, then, if
   there's anything this session hasn't been told of (new inbox files, a
   message newly left in the outbox, messages it just delivered, which the
-  agent should commit), keep the agent going once to deal with it
+  agent should commit, a followed topic's newest post), keep the agent
+  going once to deal with it
   (Claude: exit 2 with the text on stderr; Codex: `decision: block`). What
   a session was told of is kept in
   `$XDG_RUNTIME_DIR/dot-ai-mail/<session id>` (or under `$TMPDIR`), so a
@@ -63,7 +68,7 @@ The spec's four steps, with these details:
   outermost enclosing project, else the parent directory; `find` to 4
   levels, pruning hidden directories and `node_modules`, without `-L`.
 - **Outbox names:** the address runs from after the time to the first
-  `--`. One that starts with `#` stays put ("topics aren't mail").
+  `--`. One that starts with `#` is a post (Topics, below).
 - **The message** for the id is everything after the header lines and the
   blank line, byte for byte, as the spec now says (Outbound files).
 - **`Re:`** goes to the inbox file as it is, if it names a message's id
@@ -82,36 +87,49 @@ The spec's four steps, with these details:
   outbox; a lock older than two minutes is a crashed run's, and is cleared.
 - **Never commits** (the spec leaves that to the agents).
 
-## With Arcana installed too
+## Topics
 
-They don't overlap: Arcana's hooks never touch the outbox (as of 0.35.3).
-They register the handle at session start, nudge the agent at Stop while
-the bus has mail for it, and at session end move unread bus mail into
-`.ai/mail/inbox/`.
+As the spec's Topics section says, in the topic home's `.ai/topics/`
+(the first `ai.path` directory, else the outermost project at or above the
+sender's):
 
-- **Sending:** dot-ai-mail delivers every outbox message whose recipient is
-  on this machine; local delivery needs no running session and no server.
-  A message whose recipient it can't find stays in the outbox, and its
-  hook says so; with Arcana, the lead sends that one over the bus
-  (`arcana_deliver`) and files it under `sent/` with `via arcana`. The
-  lead never sends by hand a message the tool can deliver. Each message
-  goes one way only, and whoever moves it to `sent/` sent it, so the
-  recipient never gets it twice.
-- **Receiving:** both write inbox files, dot-ai-mail with `Via: local` and
-  Arcana with `Via: arcana` (since 0.35.4), under different names. Agents
-  process them alike.
-- **Noticing:** at session start and at Stop, each reports its own place:
-  Arcana the bus mailbox, dot-ai-mail the inbox folder. The two places
-  don't overlap, so neither counts a message the other has. Both can keep
-  the agent going at Stop, and each does so only once for the same mail
-  (Arcana from a fix @arcana made on 2026-10-16; before it, Arcana nudged
-  again while bus mail sat unread), so they can't push each other into a
-  loop. An agent may hear of mail twice, but never misses any.
+- **Posting:** an outbox file to `#name` is checked like an address
+  (names made like handles, joined by `.`), and stays in the outbox if the
+  topic's folder doesn't exist. Its id, `Re:` check and message are a
+  message's. Under the topic's lock (`.posting`, made and cleared like the
+  outbox's), a post already ending in `-<id>.md` keeps its number (a run
+  that stopped before filing); otherwise it takes the highest number there
+  plus one, written to a hidden name and renamed into place. The original
+  is filed under `sent/` with `Post:` after `Id:`, and the line printed is
+  `posted: <name> to #name as post N`.
+- **The lock** replaced the spec draft's first idea, taking a number by
+  creating the file under it: two posts with one number have different
+  names, so creating one never fails. The spec now says the lock.
+- **Places** are `mail/following`, `<topic> <number>` lines, rewritten
+  whole through a hidden file. `read` moves a place only forward, also
+  with `--after`.
+- **`mail.follow`** is read with `awk`, from the top-level `mail:` block:
+  a flow list on the `follow:` line or a block list of `- ` items below
+  it, each quoted or not. The hooks tell of an entry that isn't a topic,
+  or a topic that doesn't exist, once per session.
 
-@arcana agreed to these three (2026-10-14,
-`mail/received/20261014-072229Z-@arcana--…-0983c0fd.md` in ipck's `.ai/`).
-Arcana 0.35.4 (`cd9852e`) has `arcana_receive` write the inbox file, so
-mail taken live is a file too.
+## The carrier
+
+Since the spec's carrier model (the user, 2026-10-25), one program on a
+machine carries mail: git config's `ai.carrier`, `local` (dot-ai-mail)
+when unset. Under any other, `deliver`, `topic` and `read` refuse, saying
+which carrier the machine has, and the hooks stay quiet; `check` and
+`find` still work. Arcana, on a `local` machine, stays out of mail in
+turn: from arcana 0.38 its hooks don't tell of mail, it writes no mail
+files, and `arcana_deliver` to a project or `arcana_publish` refuses,
+pointing to the outbox. Mail already on the bus is still written to the
+inbox as `arcana_receive` takes it.
+
+This replaces the layers of 2026-10-14 (both carrying mail, each
+announcing its own place, and the lead sending over the bus what
+dot-ai-mail left in the outbox). Mail between machines is the one thing
+the local carrier can't do; [git-carrier.md](git-carrier.md) sketches it
+over a shared git repository.
 
 ## Decided: dot-ai-mail never calls Arcana
 
@@ -180,7 +198,10 @@ dotai plugin can call `dot-ai-mail deliver` at session start and end, or
 do the same steps itself in Crystal. Either way the ids must match, which
 is why the spec should pin down the header lines.
 
-## Not in the first version
+## Not built yet
 
-- Mail between machines without a bus (an open question in the README).
+- Mail between machines without a bus (an open question in the README;
+  [git-carrier.md](git-carrier.md)).
 - Windows.
+- A command to change carriers, moving a topic's posts with their
+  numbers (the spec's Changing carriers).

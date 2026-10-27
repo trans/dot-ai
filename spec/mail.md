@@ -286,13 +286,14 @@ nothing away, and needs no following.
 - **Making one.** A topic has to exist before anything is posted to it, so
   a misspelled topic (`#arcana.release`) fails instead of starting a new
   log: the post stays in the outbox, and the carrier says why. It's made
-  once, through the carrier: `dot-ai-mail topic #arcana.releases "Arcana's
-  releases"` on the local carrier, `arcana_register` with `kind: "topic"`
-  on Arcana. The description is for agents deciding whether to follow it.
-  `dot-ai-mail topic` with no topic lists them all, each with its
-  description and its newest post's number.
-- **Reading.** Through the carrier: `dot-ai-mail read #arcana.releases` on
-  the local carrier, `arcana_inbox` with the topic as its address on
+  once, through the carrier: `dot-ai-mail topic '#arcana.releases'
+  "Arcana's releases"` on the local carrier (quoted, since a shell takes a
+  bare `#` as the start of a comment), `arcana_register` with
+  `kind: "topic"` on Arcana. The description is for agents deciding
+  whether to follow it. `dot-ai-mail topic` with no topic lists them all,
+  each with its description and its newest post's number.
+- **Reading.** Through the carrier: `dot-ai-mail read '#arcana.releases'`
+  on the local carrier, `arcana_inbox` with the topic as its address on
   Arcana. It gives the posts after the project's place in the topic, or
   after a number asked for (`--after 12`), oldest first, each headed as an
   inbox file is (below), with `Post:`. Take what matters into the notes.
@@ -315,9 +316,12 @@ any other, even if its `.ai/` holds nothing but `config.yml`.
 
 - **A post** is a file named by its number, six digits, then as an inbox
   file is named (`000003-20261024-221500Z-@arcana--v0.21.2-a1b2c3d4.md`),
-  and headed as an inbox file is, with `Post:`. The carrier takes a number
-  by creating the file under it, which fails if another post took the
-  number first, and then tries the next.
+  and headed as an inbox file is, with `Post:`. The carrier takes the next
+  number while it holds the topic's lock: `.posting` in the topic's
+  folder, a directory, so making it is atomic (one older than two minutes
+  is a crashed run's, and is cleared). Under the lock it also checks for a
+  post ending in `-<id>.md`, from a run that stopped before filing the
+  original, which keeps its number.
 - **A topic's description** is the one line in its folder's `description`
   file.
 - **The topics are machine-local.** The posters' `sent/` copies are the

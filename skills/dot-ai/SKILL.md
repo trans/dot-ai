@@ -114,7 +114,14 @@ an overseer keeps track. Write to it only by mail.
 Mail is a message from one project's address to another's, however it
 travels: both sides keep it, committed, the sender under `sent/` and the
 recipient under `received/`, so no message between projects goes
-unrecorded. Arcana topics aren't mail (`references/arcana.md`).
+unrecorded. Topics are logs anyone reads, not mail (Topics, below).
+
+Mail is carried by this machine's **carrier**: dot-ai-mail, which this
+skill ships, unless git config's `ai.carrier` names another (`git config
+ai.carrier`; unset means `local`, dot-ai-mail). Under another carrier,
+dot-ai-mail stays out of mail and that carrier's guide applies (for
+`arcana`, `references/arcana.md`). Either way you only ever write into
+this project's own folders: the carrier does the rest.
 
 The lead agent (the main session the user works with here; subagents and
 other sessions are helpers) writes mail on the user's behalf. For each
@@ -155,10 +162,11 @@ information. When unsure, hold. Under `mail.review: all` in
 the recipient's address: `<time>-<address>--<topic>.md`, for example
 `20261010-180322Z-@datadungeon--schema.md`. The time is UTC
 (`date -u +%Y%m%d-%H%M%SZ`), so every mail folder lists in the order things
-happened; the address runs from the `@` to the first `--`; the topic is a
-few lowercase words joined by `-`. The file keeps its name as it moves
-between folders. It may start with header lines (`By:`, `Held:`, `Re:`,
-`Sent:`, `Id:`) and a blank line; they are the record, not the message,
+happened; the address runs from the `@` (a topic's, from the `#`) to the
+first `--`; the topic is a few lowercase words joined by `-`. The file
+keeps its name as it moves between folders. It may start with header lines
+(`By:`, `Held:`, `Re:`, `Sent:`, `Id:`, `Post:`) and a blank line; they are
+the record, not the message,
 except `Re:`, which goes with it. Everything after them is the message
 exactly as it will be sent. The sender is this project's address. When you
 answer a message, start the file with `Re: <id>`, the `Id:` of the inbox
@@ -170,17 +178,17 @@ the original under `.ai/mail/sent/`. This skill ships a tool for it,
 `scripts/dot-ai-mail` in this skill's directory. After you clear a message
 to the outbox, run it with `sh` by its path and the command `deliver`
 (`sh <skill directory>/scripts/dot-ai-mail deliver`), then commit what it
-filed under `sent/`. It prints a line for each message: delivered, or left
-in the outbox and why. Tell the user what was left; a recipient that isn't
-on this machine can be reached over Arcana, if the project uses it.
-Installed as the dot-ai plugin, the skill comes with dot-ai-mail's session
-hooks, which also deliver at the end of each turn and tell you when mail
-arrives (without the plugin, `dot-ai-mail hooks` prints them to add by
-hand). Don't deliver by hand where the tool runs, not even a message it
-left in the outbox: tell the user its reason (no project with that
-address, two of them, no `mail/inbox/`) rather than work around it by
-hand. Only where it can't run at all (no `sh`, as on Windows) does the
-lead deliver by hand:
+filed under `sent/`. It prints a line for each message: delivered (or
+posted, for a topic), or left in the outbox and why. Installed as the
+dot-ai plugin, the skill comes with dot-ai-mail's session hooks, which
+also deliver at the end of each turn and tell you when mail arrives
+(without the plugin, `dot-ai-mail hooks` prints them to add by hand).
+Don't deliver by hand where the tool runs, not even a message it left in
+the outbox, and don't send it some other way (Arcana's `arcana_deliver`
+included): tell the user its reason (no project with that address, two of
+them, no `mail/inbox/`, no such topic) rather than work around it. Only
+where it can't run at all (no `sh`, as on Windows) does the lead deliver
+by hand:
 
 1. Find the recipient's project (Other projects, above). If it isn't
    found, is found twice, or has no `.ai/mail/inbox/`, leave the message in
@@ -196,8 +204,6 @@ lead deliver by hand:
    original's header lines and move it, under the same name, to
    `.ai/mail/sent/`.
 
-A message left in the outbox because its recipient isn't on this machine
-can go over Arcana (`references/arcana.md`).
 `sent/` is committed and never edited: it's the user's record of exactly
 what was said. When the user asks what went out, point them there.
 Otherwise mention routine mail briefly, by count, and held drafts by name.
@@ -207,17 +213,16 @@ Pushed, a message in the outbox could go out twice, once from each
 machine. Mail that arrives is committed once it's read, under
 `.ai/mail/received/`.
 
-**Never write into another project's `.ai/`** except to deliver into its
-`mail/inbox/`.
+**Never write into another project's `.ai/`**, nor into the topics:
+only the carrier does (or the lead delivering by hand, above).
 
-**Receiving.** Mail arrives in `.ai/mail/inbox/`: delivered from other
-projects' outboxes, or, with Arcana, bus mail still unread when a session
-ended. A message you take off the bus yourself is put there too
-(`references/arcana.md`). Inbox files are named by the time the message
-was sent, the sender, the topic and the message's id
+**Receiving.** Mail arrives in `.ai/mail/inbox/`, put there by the
+carrier. Bus mail left over from before Arcana stopped carrying mail here
+lands there too (`references/arcana.md`). Inbox files are named by the
+time the message was sent, the sender, the topic and the message's id
 (`20261010-182051Z-@oyl--schema-a1b2c3d4.md`). A sender starting with `#`
-is an Arcana topic, a log of posts anyone can read at any time; this
-project subscribed to it, so it sends a notice of each new post
+is a notice of a new post in a topic on the Arcana bus, which this
+project subscribed to there
 (`20261014-021714Z-#arcana.releases--post-3-a1b2c3d4.md`). A notice isn't
 mail (Processing the inbox, below).
 Inbox files start with header lines (`From:`, `To:`, `Sent:`, `Subject:`,
@@ -226,6 +231,36 @@ attached beyond text follows as a JSON block. A file whose name starts with
 `.` is a delivery in progress; leave it.
 When the user says "check mail" (agent mail, not email), look here, and on
 the bus too if the project uses Arcana.
+
+**Topics.** A topic (`#datadungeon`, `#arcana.releases`) is a log of
+posts, kept once by the carrier, that any project can read at any time;
+reading takes nothing away. With dot-ai-mail as the carrier (run it as
+under Delivery; quote a topic, `'#name'`, since the shell takes a bare `#`
+as a comment):
+
+- **Posting** is mail like any other: an outbox file addressed to the
+  topic (`20261024-221500Z-#arcana.releases--v0.21.2.md`), held or not
+  by the same rules. A post reaches every reader, so when unsure, hold.
+  Delivery gives it the next number and files it under `sent/` with a
+  `Post:` line.
+- **Making a topic** comes first, once: `dot-ai-mail topic '#name' "what
+  it's for"`. A post to a topic that doesn't exist stays in the outbox, so
+  a misspelling can't start a new log. `dot-ai-mail topic` alone lists the
+  topics, with their descriptions and number of posts.
+- **Reading:** `dot-ai-mail read '#name'` prints the posts after this
+  project's place in the topic, oldest first, and moves the place on;
+  `--after N` gives the posts after number N. Take what matters into the
+  notes. Posts aren't filed under `received/`: the topic is their record.
+  The place is kept in `.ai/mail/following`, which is machine-local: if
+  `.ai/.gitignore` doesn't list `mail/following` and `topics/` yet, add
+  them (as `assets/gitignore` has them) and commit that.
+  Refer to a post as `#name:N`, and answer one with `Re: #name:N`.
+- **Following:** list topics under `mail.follow` in `.ai/config.yml`
+  (`follow: ["#datadungeon"]`, quoted), and the hooks tell you when they
+  have new posts.
+
+Never look in, or write into, the folder where the topics are kept: go
+through `dot-ai-mail`, so the carrier can keep them elsewhere.
 
 ## Transcripts
 

@@ -1,14 +1,15 @@
 #!/bin/sh
-# dot-ai-mail: delivers .ai/ mail between the projects on this machine, and
-# tells agents when mail is waiting. It follows the Mail spec in the dot.ai
-# repository (spec/mail.md); notes/dot-ai-mail.md there is its design.
+# dot-ai-mail: the local mail carrier. It delivers .ai/ mail between the
+# projects on this machine, keeps their topics, and tells agents when mail or
+# posts are waiting. It follows the Mail spec in the dot.ai repository
+# (spec/mail.md); notes/dot-ai-mail.md there is its design.
 #
-# Needs only POSIX sh and tools: find, sed, awk, date, mv, git (for ai.path),
-# and sha256sum, shasum or openssl.
+# Needs only POSIX sh and tools: find, sed, awk, date, mv, git (for ai.path
+# and ai.carrier), and sha256sum, shasum or openssl.
 
 LC_ALL=C
 export LC_ALL
-VERSION=0.2.0
+VERSION=0.3.0
 MAX_DEPTH=4 # how far below a search root a project may sit
 TAB=$(printf '\t')
 
@@ -18,6 +19,11 @@ dot-ai-mail: deliver .ai/ mail between the projects on this machine
 
   dot-ai-mail deliver [DIR]    deliver the outbox of the project at or above DIR
   dot-ai-mail check [DIR]      list its inbox, oldest first (exit 1 when empty)
+  dot-ai-mail topic [TOPIC DESCRIPTION]
+                               make a topic, or list them all
+  dot-ai-mail read TOPIC [--after N] [DIR]
+                               the posts after this project's place in TOPIC,
+                               or after post N, and move the place on
   dot-ai-mail find [ADDRESS]   where ADDRESS's project is, or every project found
   dot-ai-mail hook EVENT [--agent claude|codex]
                                what the session hooks run: session-start, stop,
@@ -25,6 +31,9 @@ dot-ai-mail: deliver .ai/ mail between the projects on this machine
   dot-ai-mail hooks            print the hook entries for Claude Code and Codex,
                                for use without the dot-ai plugin
   dot-ai-mail version
+
+A topic is written '#name' (quoted: the shell takes a bare # as a comment)
+or just name.
 EOF
 }
 
@@ -44,6 +53,34 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 tmpdir() {
   [ -n "$TMP" ] || TMP=$(mktemp -d "${TMPDIR:-/tmp}/dot-ai-mail.XXXXXX") || die "can't make a temporary directory"
+}
+
+# Takes the lock LOCKDIR, a directory, so making it is atomic; one older
+# than 2 minutes is a crashed run's, and is cleared
+lock() {
+  mkdir "$1" 2>/dev/null && return 0
+  [ -n "$(find "$1" -prune -mmin +2 2>/dev/null)" ] && rmdir "$1" 2>/dev/null
+  mkdir "$1" 2>/dev/null
+}
+
+# This script's path, for telling agents how to run it
+self_path() {
+  case $0 in
+    /*) printf '%s\n' "$0" ;;
+    *) printf '%s/%s\n' "$(cd "$(dirname "$0")" && pwd -P)" "$(basename "$0")" ;;
+  esac
+}
+
+# The machine's carrier, git config's ai.carrier (spec/mail.md: The
+# carrier). dot-ai-mail is `local`, the default; under any other it stays
+# out of mail.
+carrier() {
+  c=$(git config --get ai.carrier 2>/dev/null)
+  printf '%s\n' "${c:-local}"
+}
+only_local() {
+  c=$(carrier)
+  [ "$c" = local ] || die "this machine's carrier is $c (git config ai.carrier), so dot-ai-mail stays out of mail"
 }
 
 # -- Projects and addresses ---------------------------------------------------
@@ -152,6 +189,134 @@ lookup() {
   return 1
 }
 
+# -- Topics --------------------------------------------------------------------
+
+# Whether NAME (without the #) is a topic's: names made like handles, joined
+# by `.` (spec/mail.md: Addresses)
+topic_ok() {
+  printf '%s\n' "$1" | grep -qx -e '[a-z][a-z0-9-]*\(\.[a-z][a-z0-9-]*\)*'
+}
+
+# Where this machine's topics are kept: .ai/topics/ of the topic home, the
+# first ai.path directory, else the outermost project at or above ROOT.
+# Prints it, or why there's none.
+topic_home() {
+  first=$(git config --get-all --type=path ai.path 2>/dev/null | head -n 1)
+  if [ -n "$first" ]; then
+    if ! d=$(cd "$first" 2>/dev/null && pwd -P); then
+      printf 'ai.path: no such directory: %s\n' "$first"
+      return 1
+    fi
+  else
+    d=$1 x=$1
+    while [ "$x" != / ]; do
+      x=$(dirname "$x")
+      [ -d "$x/.ai" ] && d=$x
+    done
+  fi
+  if [ ! -d "$d/.ai" ]; then
+    printf 'the topic home, %s, has no .ai/\n' "$d"
+    return 1
+  fi
+  printf '%s/.ai/topics\n' "$d"
+}
+
+# The posts in the topic folder DIR after number N, oldest first
+posts_after() {
+  ls -1 "$1" 2>/dev/null | awk -F- -v n="$2" '/^[0-9]+-.*\.md$/ && $1 + 0 > n'
+}
+
+# A post's number, from its file name
+post_number() {
+  printf '%s\n' "${1%%-*}" | sed -e 's/^0*//' -e 's/^$/0/'
+}
+
+# The topics the project at ROOT follows: mail.follow in its config, a flow
+# list on the line (["#a", "#b"]) or a block list below it
+follows() {
+  [ -f "$1/.ai/config.yml" ] || return 0
+  tr -d '\r' <"$1/.ai/config.yml" | awk '
+    function clean(v) {
+      sub(/^[ \t]+/, "", v)
+      if (v ~ /^"/) { v = substr(v, 2); sub(/".*$/, "", v) }
+      else if (v ~ /^'\''/) { v = substr(v, 2); sub(/'\''.*$/, "", v) }
+      else { sub(/[ \t]+#.*$/, "", v); sub(/[ \t]+$/, "", v) }
+      return v
+    }
+    /^[^ \t#]/ { mail = ($0 ~ /^mail:[ \t]*(#.*)?$/); block = 0; next }
+    !mail { next }
+    /^[ \t]+follow:/ {
+      v = $0; sub(/^[ \t]+follow:[ \t]*/, "", v)
+      if (v ~ /^\[/) {
+        v = substr(v, 2); sub(/\].*$/, "", v)
+        n = split(v, a, ",")
+        for (i = 1; i <= n; i++) { x = clean(a[i]); if (x != "") print x }
+      } else block = 1
+      next
+    }
+    block && /^[ \t]+-/ { v = $0; sub(/^[ \t]+-[ \t]*/, "", v); x = clean(v); if (x != "") print x; next }
+    /^[ \t]+[^ \t#-]/ { block = 0 }'
+}
+
+# The project at ROOT's place in TOPIC: the number of the last post it read
+place_of() {
+  if [ -f "$1/.ai/mail/following" ]; then
+    awk -v t="$2" '$1 == t { p = $2 } END { print p + 0 }' "$1/.ai/mail/following"
+  else
+    printf '0\n'
+  fi
+}
+
+# Moves the project at ROOT's place in TOPIC to N
+set_place() {
+  [ -d "$1/.ai/mail" ] || return 0
+  tmp=$1/.ai/mail/.following.$$
+  {
+    [ -f "$1/.ai/mail/following" ] && awk -v t="$2" '$1 != t' "$1/.ai/mail/following"
+    printf '%s %s\n' "$2" "$3"
+  } >"$tmp" && mv "$tmp" "$1/.ai/mail/following"
+}
+
+# Posts the message in $f to the topic folder DIR, taking the next number
+# while holding the topic's lock: prints the post's number, or why it
+# couldn't post. A post with this id already there (a run that stopped
+# before filing it) keeps its number.
+post_to() {
+  tries=0
+  until lock "$1/.posting"; do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 5 ]; then
+      printf 'another post to %s is being made: it goes next time\n' "$to"
+      return 1
+    fi
+    sleep 1
+  done
+  old=$(ls -1 "$1" | grep -e "^[0-9]*-.*-$id\\.md\$" | head -n 1)
+  if [ -n "$old" ]; then
+    rmdir "$1/.posting"
+    post_number "$old"
+    return 0
+  fi
+  n=$(posts_after "$1" 0 | awk -F- '{ if ($1 + 0 > m) m = $1 + 0 } END { print m + 1 }')
+  pname=$(printf '%06d' "$n")-$iname
+  tmp=$1/.$pname.$$
+  if ! {
+    printf 'From: %s\nTo: %s\nSent: %s\n' "$sender" "$to" "$iso"
+    [ -n "$topic" ] && printf 'Subject: %s\n' "$topic"
+    printf 'Id: %s\nPost: %s\n' "$id" "$n"
+    [ -n "$re" ] && printf 'Re: %s\n' "$re"
+    printf 'Via: local\n\n'
+    tail -n "+$k" "$f"
+  } >"$tmp" 2>/dev/null || ! mv "$tmp" "$1/$pname"; then
+    rm -f "$tmp"
+    rmdir "$1/.posting"
+    printf 'couldn'\''t write to %s\n' "$1"
+    return 1
+  fi
+  rmdir "$1/.posting"
+  printf '%s\n' "$n"
+}
+
 # -- Messages ------------------------------------------------------------------
 
 sha256() {
@@ -165,10 +330,10 @@ sha256() {
 }
 
 # "H K" for an outbound file: it has H header lines (leading lines starting
-# `By: `, `Held: `, `Re: `, `Sent: ` or `Id: `), and its message starts on
-# line K, after them and the blank line that ends them.
+# `By: `, `Held: `, `Re: `, `Sent: `, `Id: ` or `Post: `), and its message
+# starts on line K, after them and the blank line that ends them.
 layout() {
-  awk '/^(By|Held|Re|Sent|Id): / { h++; next }
+  awk '/^(By|Held|Re|Sent|Id|Post): / { h++; next }
        { b = (h > 0 && $0 == ""); exit }
        END { print h + 0, h + b + 1 }' "$1"
 }
@@ -204,13 +369,10 @@ deliver() {
   fi
   sender=@$sender
 
-  # One delivery per outbox at a time; a lock older than 2 minutes is stale
-  if ! mkdir "$box/.delivering" 2>/dev/null; then
-    [ -n "$(find "$box/.delivering" -prune -mmin +2 2>/dev/null)" ] && rmdir "$box/.delivering" 2>/dev/null
-    mkdir "$box/.delivering" 2>/dev/null || {
-      printf 'busy: another delivery from this outbox is running\n'
-      return 0
-    }
+  # One delivery per outbox at a time
+  if ! lock "$box/.delivering"; then
+    printf 'busy: another delivery from this outbox is running\n'
+    return 0
   fi
   LOCK=$box/.delivering
 
@@ -231,26 +393,41 @@ deliver() {
       *--*) to=${base%%--*} topic=${base#*--} ;;
       *) to=$base topic= ;;
     esac
+    # Where it goes: a topic's folder, or a project's inbox
     case $to in
       \#*)
-        printf 'left in the outbox: %s: %s is a topic, and topics aren'\''t mail: post to it on the bus\n' "$name" "$to"
-        continue
+        if ! topic_ok "${to#\#}"; then
+          printf 'left in the outbox: %s: %s isn'\''t an address\n' "$name" "$to"
+          continue
+        fi
+        if ! dest=$(topic_home "$root"); then
+          printf 'left in the outbox: %s: %s\n' "$name" "$dest"
+          continue
+        fi
+        dest=$dest/${to#\#}
+        if [ ! -d "$dest" ]; then
+          printf 'left in the outbox: %s: there'\''s no topic %s (dot-ai-mail topic makes one)\n' "$name" "$to"
+          continue
+        fi
+        ;;
+      *)
+        case $to in @[a-z]*) bad= ;; *) bad=1 ;; esac
+        case ${to#@} in *[!a-z0-9-]*) bad=1 ;; esac
+        if [ -n "$bad" ]; then
+          printf 'left in the outbox: %s: %s isn'\''t an address\n' "$name" "$to"
+          continue
+        fi
+        if ! dir=$(lookup "$to"); then
+          printf 'left in the outbox: %s: %s\n' "$name" "$dir"
+          continue
+        fi
+        dest=$dir/.ai/mail/inbox
+        if [ ! -d "$dest" ]; then
+          printf 'left in the outbox: %s: %s (%s) has no .ai/mail/inbox/\n' "$name" "$to" "$dir"
+          continue
+        fi
         ;;
     esac
-    case $to in @[a-z]*) bad= ;; *) bad=1 ;; esac
-    case ${to#@} in *[!a-z0-9-]*) bad=1 ;; esac
-    if [ -n "$bad" ]; then
-      printf 'left in the outbox: %s: %s isn'\''t an address\n' "$name" "$to"
-      continue
-    fi
-    if ! dir=$(lookup "$to"); then
-      printf 'left in the outbox: %s: %s\n' "$name" "$dir"
-      continue
-    fi
-    if [ ! -d "$dir/.ai/mail/inbox" ]; then
-      printf 'left in the outbox: %s: %s (%s) has no .ai/mail/inbox/\n' "$name" "$to" "$dir"
-      continue
-    fi
 
     set -- $(layout "$f")
     h=$1 k=$2
@@ -267,45 +444,63 @@ deliver() {
     now=$(date -u '+%Y%m%d-%H%M%SZ %Y-%m-%dT%H:%M:%SZ')
     stamp=${now% *} iso=${now#* }
 
-    # Deliver, unless an earlier run did and stopped before filing it
-    seen=
-    for x in "$dir/.ai/mail/inbox/"*"-$id.md" "$dir/.ai/mail/received/"*"-$id.md"; do
-      [ -e "$x" ] && seen=1 && break
-    done
-    if [ -z "$seen" ]; then
-      iname=$stamp-$sender--${topic:+$topic-}$id.md
-      tmp=$dir/.ai/mail/inbox/.$iname.$$
-      if ! {
-        printf 'From: %s\nTo: %s\nSent: %s\n' "$sender" "$to" "$iso"
-        [ -n "$topic" ] && printf 'Subject: %s\n' "$topic"
-        printf 'Id: %s\n' "$id"
-        [ -n "$re" ] && printf 'Re: %s\n' "$re"
-        printf 'Via: local\n\n'
-        tail -n "+$k" "$f"
-      } >"$tmp" 2>/dev/null || ! mv "$tmp" "$dir/.ai/mail/inbox/$iname"; then
-        rm -f "$tmp"
-        printf 'left in the outbox: %s: couldn'\''t write to %s/.ai/mail/inbox/\n' "$name" "$dir"
-        continue
-      fi
-    fi
+    iname=$stamp-$sender--${topic:+$topic-}$id.md
+    post=
+    case $to in
+      \#*)
+        if ! post=$(post_to "$dest"); then
+          printf 'left in the outbox: %s: %s\n' "$name" "$post"
+          continue
+        fi
+        ;;
+      *)
+        # Deliver, unless an earlier run did and stopped before filing it
+        seen=
+        for x in "$dest/"*"-$id.md" "$dir/.ai/mail/received/"*"-$id.md"; do
+          [ -e "$x" ] && seen=1 && break
+        done
+        if [ -z "$seen" ]; then
+          tmp=$dest/.$iname.$$
+          if ! {
+            printf 'From: %s\nTo: %s\nSent: %s\n' "$sender" "$to" "$iso"
+            [ -n "$topic" ] && printf 'Subject: %s\n' "$topic"
+            printf 'Id: %s\n' "$id"
+            [ -n "$re" ] && printf 'Re: %s\n' "$re"
+            printf 'Via: local\n\n'
+            tail -n "+$k" "$f"
+          } >"$tmp" 2>/dev/null || ! mv "$tmp" "$dest/$iname"; then
+            rm -f "$tmp"
+            printf 'left in the outbox: %s: couldn'\''t write to %s/\n' "$name" "$dest"
+            continue
+          fi
+        fi
+        ;;
+    esac
 
-    # File the original under sent/, with Sent: and Id: lines
+    # File the original under sent/, with Sent: and Id: lines, and Post: for
+    # a post
     sent=$root/.ai/mail/sent
     mkdir -p "$sent"
     if [ ! -e "$sent/$name" ]; then
       tmp=$sent/.$name.$$
       if ! {
         [ "$h" -gt 0 ] && head -n "$h" "$f"
-        printf 'Sent: %s via local\nId: %s\n\n' "$iso" "$id"
+        printf 'Sent: %s via local\nId: %s\n' "$iso" "$id"
+        [ -n "$post" ] && printf 'Post: %s\n' "$post"
+        printf '\n'
         tail -n "+$k" "$f"
       } >"$tmp" || ! mv "$tmp" "$sent/$name"; then
         rm -f "$tmp"
-        printf 'error: %s was delivered to %s, but couldn'\''t be filed under .ai/mail/sent/\n' "$name" "$to"
+        printf 'error: %s went to %s, but couldn'\''t be filed under .ai/mail/sent/\n' "$name" "$to"
         continue
       fi
     fi
     rm -f "$f"
-    printf 'delivered: %s to %s\n' "$name" "$to"
+    if [ -n "$post" ]; then
+      printf 'posted: %s to %s as post %s\n' "$name" "$to" "$post"
+    else
+      printf 'delivered: %s to %s\n' "$name" "$to"
+    fi
   done
 
   rmdir "$LOCK" 2>/dev/null
@@ -320,6 +515,7 @@ inbox_list() {
 # -- Commands --------------------------------------------------------------------
 
 cmd_deliver() {
+  only_local
   root=$(project_root "${1:-.}") || die "no .ai/ at or above ${1:-.}"
   tmpdir
   deliver "$root" >"$TMP/out"
@@ -337,6 +533,73 @@ cmd_check() {
   list=$(inbox_list "$root")
   [ -n "$list" ] || return 1
   printf '%s\n' "$list"
+}
+
+cmd_topic() {
+  only_local
+  here=$(project_root .) || here=$(pwd -P)
+  home=$(topic_home "$here") || die "$home"
+  if [ -z "${1:-}" ]; then
+    found=
+    for d in "$home"/*/; do
+      [ -d "$d" ] || continue
+      d=${d%/} found=1
+      last=$(posts_after "$d" 0 | tail -n 1)
+      printf '%-24s %6s posts  %s\n' "#$(basename "$d")" "$(post_number "${last:-0}")" \
+        "$(head -n 1 "$d/description" 2>/dev/null)"
+    done
+    [ -n "$found" ] || printf 'no topics yet (they are kept in %s)\n' "$home"
+    return 0
+  fi
+  t=${1#\#}
+  topic_ok "$t" || die "#$t isn't a topic's name: names made like handles, joined by . (#arcana.releases)"
+  desc=$(printf '%s' "${2:-}" | tr '\n\r\t' '   ' | sed -e 's/^ *//' -e 's/ *$//')
+  [ -n "$desc" ] || die "usage: dot-ai-mail topic TOPIC DESCRIPTION (say what the topic is for)"
+  [ -d "$home/$t" ] && die "#$t already exists: $(head -n 1 "$home/$t/description" 2>/dev/null)"
+  { mkdir -p "$home" && mkdir "$home/$t" && printf '%s\n' "$desc" >"$home/$t/description"; } ||
+    die "couldn't make $home/$t"
+  printf 'made #%s\n' "$t"
+}
+
+cmd_read() {
+  t= after= dir=.
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --after) after=${2:-} && shift ;;
+      --after=*) after=${1#--after=} ;;
+      *) if [ -z "$t" ]; then t=$1; else dir=$1; fi ;;
+    esac
+    shift
+  done
+  [ -n "$t" ] || die "usage: dot-ai-mail read TOPIC [--after N] [DIR]"
+  case $after in *[!0-9]*) die "--after takes a post's number" ;; esac
+  only_local
+  t=#${t#\#}
+  topic_ok "${t#\#}" || die "$t isn't a topic's address"
+  root=$(project_root "$dir") || die "no .ai/ at or above $dir"
+  home=$(topic_home "$root") || die "$home"
+  tdir=$home/${t#\#}
+  [ -d "$tdir" ] || die "there's no topic $t"
+  place=$(place_of "$root" "$t")
+  from=${after:-$place}
+  oldest=$(posts_after "$tdir" 0 | head -n 1)
+  [ -n "$oldest" ] && oldest=$(post_number "$oldest")
+  if [ -n "$oldest" ] && [ "$oldest" -gt $((from + 1)) ]; then
+    printf '%s keeps posts from %s on: %s to %s are gone\n\n' "$t" "$oldest" $((from + 1)) $((oldest - 1))
+  fi
+  posts=$(posts_after "$tdir" "$from")
+  if [ -z "$posts" ]; then
+    printf 'no posts in %s after %s\n' "$t" "$from"
+    return 0
+  fi
+  printf '%s\n' "$posts" | while IFS= read -r p; do
+    printf '==> %s <==\n' "$p"
+    cat "$tdir/$p"
+    printf '\n'
+  done
+  last=$(post_number "$(printf '%s\n' "$posts" | tail -n 1)")
+  [ "$last" -gt "$place" ] && set_place "$root" "$t" "$last"
+  return 0
 }
 
 cmd_find() {
@@ -406,6 +669,7 @@ cmd_hook() {
 
   root=$(project_root "${CLAUDE_PROJECT_DIR:-${cwd:-.}}") || quiet
   [ -d "$root/.ai/mail" ] || quiet
+  [ "$(carrier)" = local ] || quiet
   tmpdir
   deliver "$root" >"$TMP/out"
   [ "$event" = session-end ] && exit 0
@@ -423,10 +687,10 @@ cmd_hook() {
   untold() {
     [ "$event" = session-start ] || ! grep -qxF "$1" "$told"
   }
-  sent=$(grep -c '^delivered: ' "$TMP/out")
+  sent=$(grep -c -e '^delivered: ' -e '^posted: ' "$TMP/out")
   if [ "$sent" -gt 0 ]; then
     if [ "$sent" -eq 1 ]; then them=it; else them=them; fi
-    printf 'dot-ai-mail delivered %s from the outbox and filed %s under .ai/mail/sent/: commit %s.\n' \
+    printf 'dot-ai-mail sent %s from the outbox and filed %s under .ai/mail/sent/: commit %s.\n' \
       "$(count "$sent" message)" "$them" "$them" >>"$TMP/say"
   fi
   grep -e '^error: ' -e '^left in the outbox: ' "$TMP/out" | while IFS= read -r line; do
@@ -447,6 +711,38 @@ cmd_hook() {
       printf 'You have mail: %s in .ai/mail/inbox/:\n' "$what"
       cat "$TMP/new"
       printf 'Process %s as the dot-ai skill says (Processing the inbox).\n' "$them"
+    } >>"$TMP/say"
+  fi
+
+  # New posts in the topics the project follows, each told of once
+  home=$(topic_home "$root") || home=
+  : >"$TMP/posts"
+  follows "$root" | while IFS= read -r t; do
+    why=
+    case $t in
+      \#*) topic_ok "${t#\#}" || why="$t isn't a topic's address" ;;
+      *) why="$t isn't a topic's address" ;;
+    esac
+    [ -z "$why" ] && [ -z "$home" ] && why="there's no topic $t"
+    [ -z "$why" ] && [ ! -d "$home/${t#\#}" ] && why="there's no topic $t"
+    if [ -n "$why" ]; then
+      untold "follow:$t" || continue
+      printf 'follow:%s\n' "$t" >>"$told"
+      printf 'dot-ai-mail: mail.follow in .ai/config.yml: %s\n' "$why" >>"$TMP/say"
+      continue
+    fi
+    new=$(posts_after "$home/${t#\#}" "$(place_of "$root" "$t")")
+    [ -n "$new" ] || continue
+    last=$(post_number "$(printf '%s\n' "$new" | tail -n 1)")
+    untold "topic:$t:$last" || continue
+    printf 'topic:%s:%s\n' "$t" "$last" >>"$told"
+    printf '  %s in %s\n' "$(count "$(printf '%s\n' "$new" | wc -l | tr -d ' ')" "new post")" "$t" >>"$TMP/posts"
+  done
+  if [ -s "$TMP/posts" ]; then
+    {
+      printf 'New posts in the topics this project follows:\n'
+      cat "$TMP/posts"
+      printf 'Read them with: sh "%s" read '\''#topic'\'' (the dot-ai skill: Topics).\n' "$(self_path)"
     } >>"$TMP/say"
   fi
 
@@ -489,6 +785,8 @@ EOF
 case ${1:-} in
   deliver) shift && cmd_deliver "$@" ;;
   check) shift && cmd_check "$@" ;;
+  topic) shift && cmd_topic "$@" ;;
+  read) shift && cmd_read "$@" ;;
   find) shift && cmd_find "$@" ;;
   hook) shift && cmd_hook "$@" ;;
   hooks) cmd_hooks ;;

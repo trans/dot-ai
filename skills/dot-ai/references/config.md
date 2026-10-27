@@ -10,6 +10,7 @@ description: >      # what this project's agent does, for other agents
   The agent for Oyl, a ...
 mail:
   review: triage    # or "all": every outbound message waits for approval
+  follow: ["#arcana.releases"]  # topics whose new posts the agent is told of
 transcript:
   encrypt: false    # true: also encrypt committed transcripts (git-crypt)
   redaction: standard
@@ -25,6 +26,7 @@ users:              # the people working here, by handle
 | `handle` | string | the directory's name | This project's handle: other projects' agents send mail to `@` plus it (`@oyl`), whatever carries the mail (local delivery, the Arcana bus). Short, lowercase, letters, digits and `-`. Without one, the project directory's name, folded into a handle (`Silicon.Circus` gives `silicon-circus`). |
 | `description` | string | none | One or two sentences on what this project's agent does, for other agents: Arcana's directory listing, an overseer looking over its projects. `>` folds a multi-line value into one paragraph. |
 | `mail.review` | string | `triage` | Which outbound mail waits for the user's approval. `triage`: the lead agent decides per message, sending routine mail to the outbox and holding the rest in drafts. `all`: every message waits in drafts. |
+| `mail.follow` | list of strings | none | The topics this project follows, by address (`#arcana.releases`, quoted: YAML reads an unquoted `#` as a comment). The carrier tells its agents of new posts in them. |
 | `transcript.encrypt` | boolean | `false` | Encrypt committed transcripts on the `ai` branch with git-crypt (GPG mode), on top of redaction. Losing every key loses them, so keep two GPG keys, one offline. |
 | `users.<handle>` | map | none | A person working in this project, by handle (short, lowercase, letters, digits and `-`): `name`; `emails`, every address they commit with; and `aliases`, handles they used before this one (ids under them stay theirs). A person's handle is the entry whose `emails` include their git `user.email`; unregistered, it's their email's local part. Records and transcript entries carry it (`N17@trans`, `E1043@trans`), shown without it to its owner. Each contributor adds their own entry; a handle already registered to someone else's emails is taken. |
 | `copious` | map | none | Settings for tools built on Copious (ipck), by path: `plugins`, `memory.curate`, `orchestrator.max_depth`, `permissions.allow`, and so on; copious's README ("Settings") lists them. Each machine can override them in its own `.var/ai/config.yml` (the same shape, never committed); `ipck config set` writes there. |
@@ -37,10 +39,12 @@ Write the handle without the `@` (`handle: oyl`). Written with it, it must
 be quoted: YAML reads an unquoted leading `@` as a reserved indicator and
 fails.
 
-Two per-person settings that hold across projects live in git config
-instead: `ai.machine`, this machine's name, and `ai.path`, the directories
-to search for projects when delivering mail (multi-valued:
-`git config --global --add ai.path ~/Projects`).
+Per-person settings that hold across projects live in git config instead:
+`ai.machine`, this machine's name; `ai.path`, the directories to search
+for projects when delivering mail (multi-valued:
+`git config --global --add ai.path ~/Projects`), the first of which keeps
+the topics; and `ai.carrier`, what carries the mail (`local`, dot-ai-mail,
+when unset; or `arcana`).
 
 `.ai/config.yml` lives on the `ai` branch. A checkout without the `.ai`
 worktree has no config, which readers treat like an empty one.
