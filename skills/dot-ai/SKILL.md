@@ -80,8 +80,8 @@ inside it are relative to `.ai/` (`memory/release.md`, `mail/inbox/<file>`).
 3. Look in `.ai/mail/`: process the inbox, and if you are the lead, review
    drafts from helpers and tell the user about drafts waiting for them (all
    below). Look in `Intake/` for files the user left for you.
-4. If the project uses Arcana (its tools are available, or a session hook
-   said it registered you), check the bus too: see `references/arcana.md`.
+4. If this machine runs Arcana (its tools are available, or a session hook
+   said it registered you), `references/arcana.md` says what it's for.
 5. Treat notes as true when written, not necessarily now. Before acting on
    one that names a function, flag, file or commit, check the code or
    `git log`. When a note turns out wrong, fix it.
@@ -111,38 +111,37 @@ an overseer keeps track. Write to it only by mail.
 
 ## Mail
 
-Mail is a message from one project's address to another's, however it
-travels: both sides keep it, committed, the sender under `sent/` and the
-recipient under `received/`, so no message between projects goes
-unrecorded. Topics are logs anyone reads, not mail (Topics, below).
+Mail is a message between this project's agent and another project's. You
+write it as a file in this project's `.ai/mail/`, and the machine's mail
+carrier delivers it: dot-ai-mail, which this skill ships, unless `git
+config ai.carrier` says `arcana`. You never write into another project's
+`.ai/`.
 
-Mail is carried by this machine's **carrier**: dot-ai-mail, which this
-skill ships, unless git config's `ai.carrier` names another (`git config
-ai.carrier`; unset means `local`, dot-ai-mail). Under another carrier,
-dot-ai-mail stays out of mail and that carrier's guide applies (for
-`arcana`, `references/arcana.md`). Either way you only ever write into
-this project's own folders: the carrier does the rest.
+This section is all you need day to day. When something goes wrong (a
+message left in the outbox, mail that seems lost or doubled, a file or a
+header line you don't understand), or the user asks how mail works, read
+`references/mail.md`.
 
-The lead agent (the main session the user works with here; subagents and
-other sessions are helpers) writes mail on the user's behalf. For each
-message it decides one thing: does this need the user's approval?
+**Sending.** One message per file in `.ai/mail/outbox/`, named
+`<time>-<address>--<topic>.md`: `20261010-180322Z-@oyl--schema.md`. The
+time is now, in UTC (`date -u +%Y%m%d-%H%M%SZ`); the address is the
+recipient's (Other projects, above); the topic is a few lowercase words
+joined by `-`. The file holds just the message. To answer a message, start
+the file with `Re: <id>`, the `Id:` of the message you're answering, and a
+blank line. Then deliver it, with `sh <skill directory>/scripts/dot-ai-mail
+deliver` (where Arcana is the carrier, `arcana mail deliver`), and commit
+what that filed under `.ai/mail/sent/`. The session hooks also deliver at
+the end of each turn. A message left in the outbox stays there: tell the
+user the reason given, and never send it another way or delete it.
 
-- **No:** put it in `.ai/mail/outbox/`, and have it delivered (below).
-- **Yes:** put it in `.ai/mail/drafts/` with a first line `Held: <why>`,
-  and tell the user. Once they approve, move it to the outbox; if they turn
-  it down, delete it.
+Say what you have to say in one message rather than several in a row, and
+don't write just to say a message arrived: its sender is told when you've
+read it.
 
-**Mail from helpers.** A subagent, or another session working on the
-project, never sends and never writes to the outbox. It puts its message in
-`.ai/mail/drafts/` with a first line `By: <who wrote it>`, and the lead
-reviews it as if it had written it: routine mail goes to the outbox (the
-`By:` line stays, as the record of who wrote it), mail that needs the user
-gets a `Held: <why>` line, and mail that shouldn't go is rewritten or
-deleted. So a draft waits on the lead while it has only a `By:` line, and
-on the user once it has a `Held:` line.
-
-**What needs approval.** The user can't read every message, so only what
-needs them waits. Hold anything that:
+**What needs the user.** The lead agent (the main session the user works
+with here) sends routine mail itself: status, notices of things done ("the
+schema change landed in `abc1234`"), answers from what is already settled,
+requests for information. It holds anything that:
 
 - commits the user or the project: a promise, a deadline, agreeing to or
   declining a change another project asked for;
@@ -152,132 +151,38 @@ needs them waits. Hold anything that:
   outside services);
 - is of a kind, or to a recipient, the user asked to see first.
 
-Routine mail goes straight out: status updates, notices of things done
-("the schema change landed in `abc1234`"), answers from what is already
-settled (code, docs, notes), acknowledgements, and requests for
-information. When unsure, hold. Under `mail.review: all` in
-`.ai/config.yml`, everything is held.
+A held message goes in `.ai/mail/drafts/` with a first line `Held: <why>`:
+tell the user, move it to the outbox once they approve, delete it if they
+don't. When unsure, hold. Under `mail.review: all` in `.ai/config.yml`,
+everything is held. Helpers (subagents, other sessions on the project)
+never send: they put their message in `.ai/mail/drafts/` with a first line
+`By: <who wrote it>`, and the lead reviews it as its own.
 
-**The files.** One message per file, named by the time you write it and
-the recipient's address: `<time>-<address>--<topic>.md`, for example
-`20261010-180322Z-@datadungeon--schema.md`. The time is UTC
-(`date -u +%Y%m%d-%H%M%SZ`), so every mail folder lists in the order things
-happened; the address runs from the `@` (a topic's, from the `#`) to the
-first `--`; the topic is a few lowercase words joined by `-`. The file
-keeps its name as it moves between folders. It may start with header lines
-(`By:`, `Held:`, `Re:`, `Sent:`, `Id:`, `Post:`) and a blank line; they are
-the record, not the message,
-except `Re:`, which goes with it. Everything after them is the message
-exactly as it will be sent. The sender is this project's address. When you
-answer a message, start the file with `Re: <id>`, the `Id:` of the inbox
-file you're answering (or `Re: #topic:<number>` for a topic post), so the
-thread can be followed on both sides.
+**Receiving.** The hooks tell you when mail arrives in `.ai/mail/inbox/`:
+process it as Processing the inbox says. When the user says "check mail"
+(agent mail, not email), look there. The hooks also tell you when mail you
+sent has been read; nothing needs doing unless you were waiting on it.
 
-**Delivery** takes each message in the outbox to its recipient and files
-the original under `.ai/mail/sent/`. This skill ships a tool for it,
-`scripts/dot-ai-mail` in this skill's directory. After you clear a message
-to the outbox, run it with `sh` by its path and the command `deliver`
-(`sh <skill directory>/scripts/dot-ai-mail deliver`), then commit what it
-filed under `sent/`. It prints a line for each message: delivered (or
-posted, for a topic), or left in the outbox and why. Installed as the
-dot-ai plugin, the skill comes with dot-ai-mail's session hooks, which
-also deliver at the end of each turn and tell you when mail arrives, and
-when mail you sent has been read (without the plugin, `dot-ai-mail hooks`
-prints them to add by hand).
-Don't deliver by hand where the tool runs, not even a message it left in
-the outbox, and don't send it some other way (Arcana's `arcana_deliver`
-included): tell the user its reason (no project with that address, two of
-them, no `mail/inbox/`, no such topic) rather than work around it. Never
-delete it either. Run inside a sandbox (Codex's), `deliver` can't write
-into other projects, so it says it couldn't write: leave the message, and
-the session hooks, which run outside the sandbox, deliver it when the turn
-ends. Only
-where it can't run at all (no `sh`, as on Windows) does the lead deliver
-by hand:
+**The record.** `sent/` and `received/` are committed and never edited:
+together they are everything this project said and was told. Drafts, the
+outbox and the inbox aren't committed. When the user asks what went out,
+point them to `sent/`; otherwise mention routine mail by count and held
+drafts by name.
 
-1. Find the recipient's project (Other projects, above). If it isn't
-   found, is found twice, or has no `.ai/mail/inbox/`, leave the message in
-   the outbox and tell the user why.
-2. Write the message into the recipient's `.ai/mail/inbox/` as an inbox
-   file (Receiving, below) with `Via: local`, and its `Re:` line if it has
-   one. Its id is the first 8 hex
-   digits of the SHA-256 of this project's address, the outbound file's
-   name and the message, joined by newlines. If a file ending in
-   `-<id>.md` is already in the recipient's `mail/inbox/` or
-   `mail/received/`, it was delivered before: skip to step 3.
-3. Add `Sent: <date and time> via local` and `Id: <id>` to the
-   original's header lines and move it, under the same name, to
-   `.ai/mail/sent/`.
+**Topics** (`#datadungeon`, `#arcana.releases`) are logs any project can
+read; reading takes nothing away. In the shell, quote the name: `'#name'`.
 
-`sent/` is committed and never edited: it's the user's record of exactly
-what was said. When the user asks what went out, point them there.
-Otherwise mention routine mail briefly, by count, and held drafts by name.
+- **Post** with an outbox file addressed to the topic
+  (`20261024-221500Z-#arcana.releases--v0.21.2.md`), held or not by the
+  same rules. A post reaches every reader, so when unsure, hold.
+- **Read** with `dot-ai-mail read '#name'`: the posts you haven't read yet.
+  Take what matters into the notes.
+- **Make** a topic first, once: `dot-ai-mail topic '#name' "what it's
+  for"`. `dot-ai-mail topic` alone lists them.
+- **Follow** a topic by listing it under `mail.follow` in `.ai/config.yml`
+  (`follow: ["#datadungeon"]`): the hooks tell you of new posts.
 
-**Receipts.** A message has been read once its recipient files it under
-its `received/`. The hooks tell you so, under "Receipts for mail this
-project sent", naming your copy under `sent/` (`@oyl read
-20261010-180322Z-@oyl--schema.md`), and also when a recipient took a
-message out of its inbox without filing it. They come at the next prompt
-or session start, never keeping you going on their own. Nothing needs
-doing unless you were waiting on that message; tell the user when they
-asked about it. To see whether a message was read, wait for its receipt
-rather than looking in the recipient's folders. The outbox's hidden
-`.receipts` is dot-ai-mail's list of the messages still waiting for one:
-leave it alone.
-
-**Machine-local:** drafts, the outbox and the inbox aren't committed.
-Pushed, a message in the outbox could go out twice, once from each
-machine. Mail that arrives is committed once it's read, under
-`.ai/mail/received/`.
-
-**Never write into another project's `.ai/`**, nor into the topics:
-only the carrier does (or the lead delivering by hand, above).
-
-**Receiving.** Mail arrives in `.ai/mail/inbox/`, put there by the
-carrier. Bus mail left over from before Arcana stopped carrying mail here
-lands there too (`references/arcana.md`). Inbox files are named by the
-time the message was sent, the sender, the topic and the message's id
-(`20261010-182051Z-@oyl--schema-a1b2c3d4.md`). A sender starting with `#`
-is a notice of a new post in a topic on the Arcana bus, which this
-project subscribed to there
-(`20261014-021714Z-#arcana.releases--post-3-a1b2c3d4.md`). A notice isn't
-mail (Processing the inbox, below).
-Inbox files start with header lines (`From:`, `To:`, `Sent:`, `Subject:`,
-`Id:`, `Re:` on a reply, `Via:`), a blank line, then the message. Anything the sender
-attached beyond text follows as a JSON block. A file whose name starts with
-`.` is a delivery in progress; leave it.
-When the user says "check mail" (agent mail, not email), look here, and on
-the bus too if the project uses Arcana.
-
-**Topics.** A topic (`#datadungeon`, `#arcana.releases`) is a log of
-posts, kept once by the carrier, that any project can read at any time;
-reading takes nothing away. With dot-ai-mail as the carrier (run it as
-under Delivery; quote a topic, `'#name'`, since the shell takes a bare `#`
-as a comment):
-
-- **Posting** is mail like any other: an outbox file addressed to the
-  topic (`20261024-221500Z-#arcana.releases--v0.21.2.md`), held or not
-  by the same rules. A post reaches every reader, so when unsure, hold.
-  Delivery gives it the next number and files it under `sent/` with a
-  `Post:` line.
-- **Making a topic** comes first, once: `dot-ai-mail topic '#name' "what
-  it's for"`. A post to a topic that doesn't exist stays in the outbox, so
-  a misspelling can't start a new log. `dot-ai-mail topic` alone lists the
-  topics, with their descriptions and number of posts.
-- **Reading:** `dot-ai-mail read '#name'` prints the posts after this
-  project's place in the topic, oldest first, and moves the place on;
-  `--after N` gives the posts after number N. Take what matters into the
-  notes. Posts aren't filed under `received/`: the topic is their record.
-  The place is kept in `.ai/mail/following`, which is machine-local: if
-  `.ai/.gitignore` doesn't list `mail/following` and `topics/` yet, add
-  them (as `assets/gitignore` has them) and commit that.
-  Refer to a post as `#name:N`, and answer one with `Re: #name:N`.
-- **Following:** list topics under `mail.follow` in `.ai/config.yml`
-  (`follow: ["#datadungeon"]`, quoted), and the hooks tell you when they
-  have new posts.
-
-Never look in, or write into, the folder where the topics are kept: go
-through `dot-ai-mail`, so the carrier can keep them elsewhere.
+Where Arcana is the carrier, `arcana mail` takes the same commands.
 
 ## Transcripts
 
@@ -373,9 +278,8 @@ said, and with `sent/` it lists the whole correspondence in order. In a
 public repo, a message with private details is summarized and then deleted
 instead of filed, so the original is never committed.
 
-A notice from a topic (a sender starting with `#`) isn't mail and is never
-filed: read the post it points to if it bears on the work, take what
-matters into the notes, and delete the notice. The topic keeps its own log.
+A file from a topic (its sender starts with `#`) isn't mail: see
+`references/mail.md`.
 
 ## Intake and Outtake
 
