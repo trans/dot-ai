@@ -94,6 +94,10 @@ The spec's four steps, with these details:
   delivery, so two runs a second apart would deliver the same message
   under two names. A run that finds the lock says `busy` and leaves the
   outbox; a lock older than two minutes is a crashed run's, and is cleared.
+  Since 2026-10-29 the spec has it (The carrier's files), with `.posting`,
+  `.receipts` and `mail/following`, so every carrier on a machine uses the
+  same files and locks: Arcana, carrying the outbox, waits on dot-ai-mail
+  and the other way round.
 - **Never commits** (the spec leaves that to the agents).
 
 ## Topics
@@ -135,7 +139,9 @@ first idea; the user preferred being told, without running anything.
   project and the outbox name, tab-separated. The project is kept so
   checking needs no search of `ai.path`. The outbox's ignore rule
   (`mail/outbox/*`) already keeps the file out of commits, which matters:
-  it holds local paths.
+  it holds local paths. A line whose project doesn't start with `/` is
+  another carrier's, for a recipient on another machine, and is left for
+  it.
 - **Checking:** a file ending in `-<id>.md` in the recipient's
   `received/` means read; one in its inbox means still waiting; neither
   means it left the inbox unfiled; no `.ai/mail/` at the project means it

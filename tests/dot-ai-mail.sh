@@ -190,14 +190,17 @@ check "prompt: quiet while nothing is read" '[ -z "$(hook prompt r1 "$P/rho" cla
 mv "$S/inbox/"*--one-*.md "$S/received/"
 rm "$S/inbox/"*--two-*.md
 printf 'deadbeef\t@ghost\t%s\t20261016-100500Z-@ghost--boo.md\n' "$T/nowhere" >>"$R/outbox/.receipts"
+printf 'cafef00d\t@far\tarcana\t20261016-100600Z-@far--away.md\n' >>"$R/outbox/.receipts"
 mkdir "$R/outbox/.delivering"
-check "prompt: quiet while a delivery runs" '[ -z "$(hook prompt r1 "$P/rho" claude)" ] && [ "$(wc -l <"$R/outbox/.receipts" | tr -d " ")" = 4 ]'
+check "prompt: quiet while a delivery runs" '[ -z "$(hook prompt r1 "$P/rho" claude)" ] && [ "$(wc -l <"$R/outbox/.receipts" | tr -d " ")" = 5 ]'
 rmdir "$R/outbox/.delivering"
 printf 'Four.\n' >"$R/outbox/20261016-100400Z-@sigma--four.md"
 out=$(hook prompt r1 "$P/rho" claude)
 check "prompt: tells of a message read" 'printf "%s" "$out" | grep -q "^{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Receipts for mail this project sent" && printf "%s" "$out" | grep -q "@sigma read 20261016-100000Z-@sigma--one.md"'
 check "prompt: of one taken out unfiled, and one whose project is gone" 'printf "%s" "$out" | grep -q "@sigma took 20261016-100100Z-@sigma--two.md out of its inbox" && printf "%s" "$out" | grep -q "@ghost: no telling whether it read"'
-check "prompt: each told once, and nothing delivered" '[ -z "$(hook prompt r1 "$P/rho" claude)" ] && [ "$(wc -l <"$R/outbox/.receipts" | tr -d " ")" = 1 ] && [ -f "$R/outbox/20261016-100400Z-@sigma--four.md" ]'
+check "prompt: each told once, and nothing delivered" '[ -z "$(hook prompt r1 "$P/rho" claude)" ] && [ "$(wc -l <"$R/outbox/.receipts" | tr -d " ")" = 2 ] && [ -f "$R/outbox/20261016-100400Z-@sigma--four.md" ]'
+check "receipts: another carrier's line is left" 'grep -q "^cafef00d$(printf "\t")@far$(printf "\t")arcana" "$R/outbox/.receipts" && ! printf "%s" "$out" | grep -q "@far"'
+sed -i.bak '/^cafef00d/d' "$R/outbox/.receipts" && rm -f "$R/outbox/.receipts.bak"
 mv "$S/inbox/"*--three-*.md "$S/received/"
 rm "$R/outbox/20261016-100400Z-@sigma--four.md"
 check "stop: a receipt alone doesn't keep Claude going" 'hook stop r2 "$P/rho" claude 2>/dev/null && grep -q -- "--three.md$" "$R/outbox/.receipts"'

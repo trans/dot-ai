@@ -528,7 +528,9 @@ receipts() {
   while IFS=$TAB read -r id to dir name; do
     [ -n "$name" ] || continue
     st=gone
-    if [ ! -d "$dir/.ai/mail" ]; then
+    if [ "${dir#/}" = "$dir" ]; then
+      st=waiting # another carrier's, for a recipient elsewhere
+    elif [ ! -d "$dir/.ai/mail" ]; then
       st=moved
     else
       for x in "$dir/.ai/mail/received/"*"-$id.md"; do [ -e "$x" ] && st=read && break; done

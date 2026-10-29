@@ -80,6 +80,12 @@ answers that the message goes in the outbox instead. Arcana is still the
 way to call services on a machine whose carrier is `local`, since a call
 to a service isn't mail.
 
+Every carrier keeps what it keeps in projects' folders the same way, under
+the same locks (The carrier's files, below). So the machine's carrier can
+change without anything kept there being moved, and two carriers that run
+at once by mistake wait for each other rather than send a message twice
+or give two posts one number.
+
 The outbox works whichever carrier it is, so nothing an agent has to do
 depends on the carrier. A machine can change carriers, and a carrier can
 change where it keeps things, without the agents noticing. That only holds
@@ -88,12 +94,13 @@ straight into another project's inbox, or a topic read straight from where
 the carrier keeps it, works only for as long as the carrier keeps things
 there.
 
-**Changing carriers.** The old carrier finishes first. What it still holds
-for this machine's projects, it writes into their inboxes as inbox files,
-as delivery would (Delivery, below), and the topics it keeps move to the
-new carrier with their posts' numbers, so followers' places still hold.
-Then `ai.carrier` changes, and from then on the old carrier stays out of
-mail.
+**Changing carriers** moves only what the old carrier holds outside those
+files. It writes any mail it still holds for this machine's projects into
+their inboxes as inbox files, as delivery would (Delivery, below), and any
+posts it holds only elsewhere into the topics' folders with their numbers,
+so followers' places still hold. Then `ai.carrier` changes. A carrier
+reads it at the start of every run, so the old one stays out of mail from
+its next run on, and a run under way finishes under its locks.
 
 ## Who writes where
 
@@ -236,9 +243,11 @@ before writing to it.
 ## Delivery
 
 The local carrier's steps. Another carrier may work differently inside,
-but must leave the same files behind (below). For each file in the outbox
-(hidden files and `.gitkeep` aside); a post to a topic goes as Topics,
-below, says:
+but must leave the same files behind (below), under the same locks. The
+carrier first takes the outbox's lock (The carrier's files, below), or,
+finding it held, leaves the outbox for its next run. Then for each file in
+the outbox (hidden files and `.gitkeep` aside); a post to a topic goes as
+Topics, below, says:
 
 1. **Find the recipient** (above). If it isn't found, is found twice, or
    has no `mail/inbox/`, the message stays in the outbox, and the carrier
@@ -252,7 +261,8 @@ below, says:
    and rename it into place, so no one reads half a message.
 4. **File the original:** add `Sent: <date and time> via local` and
    `Id: <id>` to its header lines and move it, under the same name, to
-   `sent/`.
+   `sent/`. Add the message to the ones waiting for a receipt (The
+   carrier's files, below).
 
 Delivery is at least once: a message stays in the outbox until step 4, so
 it's never lost, and a run that stopped between steps 3 and 4 delivers it
@@ -308,12 +318,15 @@ nothing away, and needs no following.
   whose place is older than the oldest post kept has missed some, and the
   carrier says so.
 
-**Where the local carrier keeps them.** In `.ai/topics/<name>/` of the
-topic home: the first directory in `ai.path` (Finding projects, above),
-or without one, the outermost project enclosing the sender. Every project
-on the machine has to find the same home, so a machine whose projects
-aren't all under one directory sets `ai.path`. The home is a project like
-any other, even if its `.ai/` holds nothing but `config.yml`.
+**Where they're kept.** In `.ai/topics/<name>/` of the topic home: the
+first directory in `ai.path` (Finding projects, above), or without one,
+the outermost project enclosing the sender. Every project on the machine
+has to find the same home, so a machine whose projects aren't all under
+one directory sets `ai.path`. The home is a project like any other, even
+if its `.ai/` holds nothing but `config.yml`. Every carrier keeps a
+machine's topics here, whatever else it does with them (one that reaches
+other machines carries posts between theirs and these), so changing
+carriers leaves them in place.
 
 - **A post** is a file named by its number, six digits, then as an inbox
   file is named (`000003-20261024-221500Z-@arcana--v0.21.2-a1b2c3d4.md`),
@@ -330,8 +343,10 @@ any other, even if its `.ai/` holds nothing but `config.yml`.
 - **A following project's places** are in its `mail/following`, a
   machine-local file with one `<topic> <number>` line per topic.
 
-These are the carrier's files. Agents make and read topics through the
-carrier, never here, so a carrier can keep them elsewhere.
+These are the carrier's files (The carrier's files, below). Agents make
+and read topics through the carrier, never here: the carrier keeps each
+follower's place and takes the lock, which an agent reading the folder
+would skip.
 
 ## Inbox files
 
@@ -385,7 +400,53 @@ carrier tells the sender so, a **receipt** (`@oyl read
 there. A receipt never keeps an agent going on its own: it's told when a
 session starts, at the user's next prompt, or with something else the
 carrier has to tell before the agent stops. So no agent needs to look in
-another project's folders to see whether it read something. The local
-carrier keeps track of the messages waiting for a receipt in the outbox,
-under the hidden name `.receipts`, which the outbox's machine-local rule
-already keeps out of commits; posts get no receipts.
+another project's folders to see whether it read something. The carrier
+keeps the messages waiting for one in the sender's outbox (The carrier's
+files, below); posts get no receipts.
+
+## The carrier's files
+
+What a carrier keeps in projects' folders, in the same places and forms
+whichever carrier it is (The carrier, above):
+
+| File | Where | Holds |
+|---|---|---|
+| `.delivering` | a project's `mail/outbox/` | The outbox's lock (below) |
+| `.receipts` | a project's `mail/outbox/` | The messages waiting for a receipt (below) |
+| `following` | a project's `mail/` | Its place in each topic it follows: a `<topic> <number>` line each |
+| `<name>/` | `.ai/topics/` of the topic home | A topic: its posts, its `description` and its lock, `.posting` (Topics, above) |
+
+All are machine-local: the outbox's go uncommitted with it, and
+`.ai/.gitignore` lists `mail/following` and `topics/` (see
+[Layout](layout.md)). Agents leave them alone. A file rewritten whole is
+written under a hidden name and renamed into place, so no one reads half
+of it; `.receipts` is added to, and rewritten, only under the outbox's
+lock.
+
+**Locks** are directories, since making one is atomic: the carrier that
+makes it holds it, and removes it when done. One older than two minutes is
+a crashed run's: the next carrier to find it removes it and takes the lock.
+
+- A project's `mail/outbox/.delivering` is held while its outbox is
+  delivered, from listing the outbox to filing the last message, and while
+  `.receipts` is rewritten. A carrier that finds it held leaves that
+  outbox, and its receipts, for its next run.
+- A topic's `.posting` is held while a post is numbered and written. A
+  carrier that finds it held tries again for a few seconds, then leaves
+  the post in the outbox for its next run.
+
+**`.receipts`** has a line for each message delivered to a project and not
+yet read, added when it's delivered unless its id is there already: the
+message's id, the recipient's address, the recipient's project directory
+and the outbound file's name, separated by tabs. A carrier checks each
+line under the outbox's lock: a file ending in `-<id>.md` in the
+recipient's `mail/received/` means read; in its `mail/inbox/`, still
+waiting; in neither, it left the inbox without being filed; no `mail/`
+there, the project has moved. It tells the sender of each but the waiting
+(Noticing mail, above), drops their lines, and removes the file once it's
+empty. For a recipient on another machine, the third field is the
+carrier's own reference, anything not starting with `/`; a carrier that
+can't check a line leaves it.
+
+**Checking the setting.** A carrier reads `ai.carrier` at the start of
+every run, each hook and each command, before it touches any of these.
