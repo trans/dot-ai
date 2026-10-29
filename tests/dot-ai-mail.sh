@@ -78,6 +78,14 @@ check "lock: a running delivery is left alone" '(cd "$P/alpha" && $SH "$M" deliv
 touch -t 202001010000 "$A/outbox/.delivering"
 check "lock: a stale lock is cleared" '(cd "$P/alpha" && $SH "$M" deliver) | grep -q "^delivered: 20261015-150000Z"'
 
+# An inbox it can't write to (as from a sandbox): left, saying to leave it
+project omega 'handle: omega'
+chmod 555 "$P/omega/.ai/mail/inbox"
+printf 'x\n' >"$A/outbox/20261015-155000Z-@omega--shut.md"
+check "deliver: can't write, left for the hooks" '(cd "$P/alpha" && $SH "$M" deliver) | grep -q "^left in the outbox: 20261015-155000Z-@omega--shut.md: couldn.t write to .*leave it" && [ -f "$A/outbox/20261015-155000Z-@omega--shut.md" ]'
+chmod 755 "$P/omega/.ai/mail/inbox"
+(cd "$P/alpha" && $SH "$M" deliver >/dev/null)
+
 # Hooks
 hook() { printf '{"session_id":"%s","cwd":"%s"}' "$2" "$3" | $SH "$M" hook "$1" --agent "$4"; }
 out=$(hook session-start s1 "$P/beta" claude)

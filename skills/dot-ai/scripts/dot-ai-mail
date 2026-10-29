@@ -301,14 +301,16 @@ post_to() {
   n=$(posts_after "$1" 0 | awk -F- '{ if ($1 + 0 > m) m = $1 + 0 } END { print m + 1 }')
   pname=$(printf '%06d' "$n")-$iname
   tmp=$1/.$pname.$$
-  if ! {
+  # The shell's own errors (a folder it can't write to) are left unsaid: the
+  # line printed says what happened
+  if ! { {
     printf 'From: %s\nTo: %s\nSent: %s\n' "$sender" "$to" "$iso"
     [ -n "$topic" ] && printf 'Subject: %s\n' "$topic"
     printf 'Id: %s\nPost: %s\n' "$id" "$n"
     [ -n "$re" ] && printf 'Re: %s\n' "$re"
     printf 'Via: local\n\n'
     tail -n "+$k" "$f"
-  } >"$tmp" 2>/dev/null || ! mv "$tmp" "$1/$pname"; then
+  } >"$tmp"; } 2>/dev/null || ! mv "$tmp" "$1/$pname" 2>/dev/null; then
     rm -f "$tmp"
     rmdir "$1/.posting"
     printf 'couldn'\''t write to %s\n' "$1"
@@ -462,16 +464,16 @@ deliver() {
         done
         if [ -z "$seen" ]; then
           tmp=$dest/.$iname.$$
-          if ! {
+          if ! { {
             printf 'From: %s\nTo: %s\nSent: %s\n' "$sender" "$to" "$iso"
             [ -n "$topic" ] && printf 'Subject: %s\n' "$topic"
             printf 'Id: %s\n' "$id"
             [ -n "$re" ] && printf 'Re: %s\n' "$re"
             printf 'Via: local\n\n'
             tail -n "+$k" "$f"
-          } >"$tmp" 2>/dev/null || ! mv "$tmp" "$dest/$iname"; then
+          } >"$tmp"; } 2>/dev/null || ! mv "$tmp" "$dest/$iname" 2>/dev/null; then
             rm -f "$tmp"
-            printf 'left in the outbox: %s: couldn'\''t write to %s/\n' "$name" "$dest"
+            printf 'left in the outbox: %s: couldn'\''t write to %s/ (from a sandbox, leave it: the session hooks deliver it when the turn ends)\n' "$name" "$dest"
             continue
           fi
         fi

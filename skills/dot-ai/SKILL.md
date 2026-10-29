@@ -187,7 +187,11 @@ prints them to add by hand).
 Don't deliver by hand where the tool runs, not even a message it left in
 the outbox, and don't send it some other way (Arcana's `arcana_deliver`
 included): tell the user its reason (no project with that address, two of
-them, no `mail/inbox/`, no such topic) rather than work around it. Only
+them, no `mail/inbox/`, no such topic) rather than work around it. Never
+delete it either. Run inside a sandbox (Codex's), `deliver` can't write
+into other projects, so it says it couldn't write: leave the message, and
+the session hooks, which run outside the sandbox, deliver it when the turn
+ends. Only
 where it can't run at all (no `sh`, as on Windows) does the lead deliver
 by hand:
 
