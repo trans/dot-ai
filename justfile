@@ -6,6 +6,10 @@ default:
 test:
     sh tests/dot-ai-mail.sh
 
+# Run the same tests against Arcana's carrier (ARCANA=/path/to/arcana, else the one on PATH)
+test-arcana:
+    CARRIER=arcana sh tests/dot-ai-mail.sh
+
 # Check the plugin and marketplace manifests (needs Claude Code)
 validate:
     claude plugin validate .
