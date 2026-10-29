@@ -2,7 +2,8 @@
 
 *Draft, 2026-10-14; updated 2026-10-27. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
 0.1.0; 0.2.0 (2026-10-17) adds `Re:` and `Id:`; 0.3.0 (2026-10-27) adds
-topics, `ai.carrier` and receipts. Tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
+topics, `ai.carrier` and receipts; 0.3.1 (2026-10-29) leaves a message it
+can't write from a sandbox for the hooks, saying so. Tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
 the dot-ai plugin (`hooks/hooks.json`).*
 
 The local carrier of [Mail](../spec/mail.md): it delivers each project's
