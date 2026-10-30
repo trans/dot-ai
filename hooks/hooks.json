@@ -7,7 +7,8 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai\" hook session-start",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "dot-ai: deliver mail, list what's waiting"
           }
         ]
       }
@@ -18,7 +19,8 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai\" hook stop",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "dot-ai: deliver mail, check for new"
           }
         ]
       }
@@ -29,7 +31,8 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai\" hook prompt",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "dot-ai: check whether sent mail was read"
           }
         ]
       }
@@ -40,7 +43,8 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai\" hook session-end",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "dot-ai: deliver mail"
           }
         ]
       }

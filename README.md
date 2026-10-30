@@ -33,7 +33,8 @@ claude plugin marketplace add trans/dot-ai
 claude plugin install dot-ai@dot-ai
 ```
 
-In Codex (which asks you to trust the plugin's hooks before it runs them):
+In Codex (which asks you to trust the plugin's hooks before it runs them,
+and again after each update: `t` in `/hooks` trusts them all):
 
 ```sh
 codex plugin marketplace add trans/dot-ai

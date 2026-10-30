@@ -8,7 +8,8 @@ plugin 0.5.0) renames it `dot-ai`, with the mail commands under `dot-ai
 mail`, and adds `send`, `draft`, `done` and `rm`, so agents never name or
 move mail files themselves (the user: one interface whatever the
 carrier), and `init` and `install`; `dot-ai-mail` stays as a shim for
-`dot-ai mail`. Tested by
+`dot-ai mail`. 0.5.1 names each hook (`statusMessage`), which Codex's
+`/hooks` lists them by ("Unnamed hook" without one). Tested by
 `tests/dot-ai.sh` (`just test`); its hooks ship in the dot-ai plugin
 (`hooks/hooks.json`).*
 
