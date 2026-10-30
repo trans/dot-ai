@@ -1,10 +1,15 @@
-# dot-ai-mail
+# dot-ai's mail commands (once dot-ai-mail)
 
-*Draft, 2026-10-14; updated 2026-10-27. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
+*Draft, 2026-10-14; updated 2026-10-30. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
 0.1.0; 0.2.0 (2026-10-17) adds `Re:` and `Id:`; 0.3.0 (2026-10-27) adds
 topics, `ai.carrier` and receipts; 0.3.1 (2026-10-29) leaves a message it
-can't write from a sandbox for the hooks, saying so. Tested by `tests/dot-ai-mail.sh` (`just test`); its hooks ship in
-the dot-ai plugin (`hooks/hooks.json`).*
+can't write from a sandbox for the hooks, saying so. 0.5.0 (2026-10-30,
+plugin 0.5.0) renames it `dot-ai`, with the mail commands under `dot-ai
+mail`, and adds `send`, `draft`, `done` and `rm`, so agents never name or
+move mail files themselves (the user: one interface whatever the
+carrier); `dot-ai-mail` stays as a shim for `dot-ai mail`. Tested by
+`tests/dot-ai.sh` (`just test`); its hooks ship in the dot-ai plugin
+(`hooks/hooks.json`).*
 
 The local carrier of [Mail](../spec/mail.md): it delivers each project's
 outbox on this machine, keeps the topics, and tells agents when mail or
@@ -14,7 +19,7 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 
 ## Form
 
-- **One POSIX `sh` script**, `skills/dot-ai/scripts/dot-ai-mail`, shipped
+- **One POSIX `sh` script**, `skills/dot-ai/scripts/dot-ai`, shipped
   inside the skill, and its hooks in the dot-ai plugin: installing the
   plugin installs both, in Claude Code and Codex alike. The hooks run it
   by its path in the plugin (`${CLAUDE_PLUGIN_ROOT}`, which Codex sets
@@ -32,13 +37,18 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 
 | Command | Does |
 |---|---|
-| `dot-ai-mail deliver [DIR]` | Delivers everything in the outbox of the project at or above `DIR` (default: here). One line per message: delivered, or left in the outbox and why. |
-| `dot-ai-mail check [DIR]` | Lists the inbox, oldest first. Exits 1 when it's empty, for scripts. |
-| `dot-ai-mail topic [TOPIC DESCRIPTION]` | Makes a topic with a one-line description, or, alone, lists the topics with their number of posts and descriptions. A topic is given as `'#name'` (quoted, or the shell takes it for a comment) or `name`. |
-| `dot-ai-mail read TOPIC [--after N] [DIR]` | Prints the posts after the project's place in the topic (after post `N` with `--after`), oldest first, each under a `==> <file> <==` line, and moves the place on to the last one shown. |
-| `dot-ai-mail find [ADDRESS]` | Where an address's project is, or every project found with its address: to see why something wasn't delivered. |
-| `dot-ai-mail hook EVENT [--agent claude\|codex]` | What the session hooks run (below): `session-start`, `stop`, `prompt`, `session-end`. The plugin's hooks name no agent: `PLUGIN_ROOT` set means Codex (Claude Code sets only `CLAUDE_*`), else `CLAUDE_PROJECT_DIR` set means Claude Code, else Codex. |
-| `dot-ai-mail hooks` | Prints the hook entries to add to Claude Code's and Codex's settings, for use without the plugin. It doesn't edit them: JSON is the one thing `sh` can't safely rewrite. |
+| `dot-ai mail send ADDRESS TOPIC [--re ID] [DIR]` | Writes the message on standard input to the outbox, named from the time, the address and TOPIC folded to lowercase words joined by `-`, with `Re:` from `--re`; then delivers the outbox. Refuses a bad address, a `--re` that names nothing, or an empty message, writing nothing. |
+| `dot-ai mail draft ADDRESS TOPIC [--re ID] [--why WHY] [--by WHO] [DIR]` | The same, kept in `drafts/`: `--why` is its `Held:` line, `--by` its `By:` line. The draft is an ordinary file there, which the agent may edit before it goes. (The user preferred "draft, then send" to `send --hold` and `release`, 2026-10-30.) |
+| `dot-ai mail send NAME` | Sends a draft (its name, or path): moves it to the outbox without its `Held:` line (a `By:` line stays: it's the record) and delivers. |
+| `dot-ai mail done NAME...` | Files inbox messages under `received/`. NAME is the file's name, its path, or the message's id. A topic's notice is removed instead; one filed already is removed. |
+| `dot-ai mail rm NAME...` | Removes inbox messages without filing them (the sender's receipt says so), or drafts. For a message whose details can't be committed, after summarizing it. |
+| `dot-ai mail deliver [DIR]` | Delivers everything in the outbox of the project at or above `DIR` (default: here). One line per message: delivered, or left in the outbox and why. |
+| `dot-ai mail check [DIR]` | Lists the inbox, oldest first. Exits 1 when it's empty, for scripts. |
+| `dot-ai mail topic [TOPIC DESCRIPTION]` | Makes a topic with a one-line description, or, alone, lists the topics with their number of posts and descriptions. A topic is given as `'#name'` (quoted, or the shell takes it for a comment) or `name`. |
+| `dot-ai mail read TOPIC [--after N] [DIR]` | Prints the posts after the project's place in the topic (after post `N` with `--after`), oldest first, each under a `==> <file> <==` line, and moves the place on to the last one shown. |
+| `dot-ai mail find [ADDRESS]` | Where an address's project is, or every project found with its address: to see why something wasn't delivered. |
+| `dot-ai hook EVENT [--agent claude\|codex]` | What the session hooks run (below): `session-start`, `stop`, `prompt`, `session-end`. The plugin's hooks name no agent: `PLUGIN_ROOT` set means Codex (Claude Code sets only `CLAUDE_*`), else `CLAUDE_PROJECT_DIR` set means Claude Code, else Codex. |
+| `dot-ai hooks` | Prints the hook entries to add to Claude Code's and Codex's settings, for use without the plugin. It doesn't edit them: JSON is the one thing `sh` can't safely rewrite. |
 
 ## Hooks
 
@@ -54,7 +64,7 @@ server and nothing beyond the file system, and it doesn't need Arcana.
   going once to deal with it
   (Claude: exit 2 with the text on stderr; Codex: `decision: block`). What
   a session was told of is kept in
-  `$XDG_RUNTIME_DIR/dot-ai-mail/<session id>` (or under `$TMPDIR`), so a
+  `$XDG_RUNTIME_DIR/dot-ai/<session id>` (or under `$TMPDIR`), so a
   message the agent leaves for later never loops it, and
   `stop_hook_active` isn't needed. Files older than a week are removed.
   The receipts are told too, but only when there's something else to
@@ -157,10 +167,12 @@ first idea; the user preferred being told, without running anything.
 ## The carrier
 
 Since the spec's carrier model (the user, 2026-10-25), one program on a
-machine carries mail: git config's `ai.carrier`, `local` (dot-ai-mail)
-when unset. Under any other, `deliver`, `topic` and `read` refuse, saying
-which carrier the machine has, and the hooks stay quiet; `check` and
-`find` still work. Arcana, on a `local` machine, stays out of mail in
+machine carries mail: git config's `ai.carrier`, `local` (`dot-ai`)
+when unset. Under `arcana`, `deliver`, `topic` and `read` are handed to
+`arcana mail` with their arguments (since 0.5.0; before, they refused),
+and `send` writes the file and hands over the delivery; under
+a carrier `dot-ai` doesn't know, they refuse. The hooks stay quiet under
+any other carrier; `check`, `find`, `done` and `rm` work under all. Arcana, on a `local` machine, stays out of mail in
 turn: from arcana 0.38 its hooks don't tell of mail, it writes no mail
 files, and `arcana_deliver` to a project or `arcana_publish` refuses,
 pointing to the outbox. Mail already on the bus is still written to the
@@ -173,6 +185,13 @@ the local carrier can't do; [git-carrier.md](git-carrier.md) sketches it
 over a shared git repository.
 
 ## Decided: dot-ai-mail never calls Arcana
+
+**Superseded in part, 2026-10-30.** The user asked for one mail interface
+whatever the backend, so `dot-ai mail` is that interface, and where
+`ai.carrier` is `arcana` it hands the carrier's work to `arcana mail`.
+Otherwise it still never calls Arcana and never needs it, and it doesn't
+step aside just because Arcana is installed: only the user's `ai.carrier`
+moves the carrier's work. What follows is the decision as it stood.
 
 The user decided (2026-10-16, through @arcana: `…-e844c843.md` in ipck's
 `.ai/`): dot-ai-mail is light mail for one machine without Arcana, so it

@@ -112,27 +112,33 @@ an overseer keeps track. Write to it only by mail.
 ## Mail
 
 Mail is a message between this project's agent and another project's. You
-write it as a file in this project's `.ai/mail/`, and the machine's mail
-carrier delivers it: dot-ai-mail, which this skill ships, unless `git
-config ai.carrier` says `arcana`. You never write into another project's
-`.ai/`.
+send, file and drop it with `dot-ai`, which this skill ships: run it as `sh
+<skill directory>/scripts/dot-ai`, written `dot-ai` below (`dot-ai mail
+help` lists its commands). It keeps the files in `.ai/mail/`, and the
+machine's mail carrier delivers them, whichever program that is. You never
+write into another project's `.ai/`.
 
 This section is all you need day to day. When something goes wrong (a
 message left in the outbox, mail that seems lost or doubled, a file or a
 header line you don't understand), or the user asks how mail works, read
 `references/mail.md`.
 
-**Sending.** One message per file in `.ai/mail/outbox/`, named
-`<time>-<address>--<topic>.md`: `20261010-180322Z-@oyl--schema.md`. The
-time is now, in UTC (`date -u +%Y%m%d-%H%M%SZ`); the address is the
-recipient's (Other projects, above); the topic is a few lowercase words
-joined by `-`. The file holds just the message. To answer a message, start
-the file with `Re: <id>`, the `Id:` of the message you're answering, and a
-blank line. Then deliver it, with `sh <skill directory>/scripts/dot-ai-mail
-deliver` (where Arcana is the carrier, `arcana mail deliver`), and commit
-what that filed under `.ai/mail/sent/`. The session hooks also deliver at
-the end of each turn. A message left in the outbox stays there: tell the
-user the reason given, and never send it another way or delete it.
+**Sending.** Give `dot-ai mail send` the address (Other projects, above)
+and a few words saying what it's about, with the message on standard
+input:
+
+```sh
+dot-ai mail send @oyl "schema change" <<'EOF'
+The new column is in, as of `abc1234`.
+EOF
+```
+
+To answer a message, add `--re <id>`, the `Id:` of the message you're
+answering. It prints `delivered:`; commit what it filed under
+`.ai/mail/sent/`. If it prints `left in the outbox:` and a reason, the
+message waits there: fix it if the reason is yours to fix (a misspelt
+address: `dot-ai mail find` lists them), otherwise tell the user, and never
+send it another way.
 
 Say what you have to say in one message rather than several in a row, and
 don't write just to say a message arrived: its sender is told when you've
@@ -151,17 +157,22 @@ requests for information. It holds anything that:
   outside services);
 - is of a kind, or to a recipient, the user asked to see first.
 
-A held message goes in `.ai/mail/drafts/` with a first line `Held: <why>`:
-tell the user, move it to the outbox once they approve, delete it if they
-don't. When unsure, hold. Under `mail.review: all` in `.ai/config.yml`,
-everything is held. Helpers (subagents, other sessions on the project)
-never send: they put their message in `.ai/mail/drafts/` with a first line
-`By: <who wrote it>`, and the lead reviews it as its own.
+Hold a message by drafting it instead: `dot-ai mail draft`, with the same
+arguments as `send` plus `--why "<why it waits>"`. It waits in
+`.ai/mail/drafts/`, a file of its own: tell the user, and to change its
+wording, edit the message there (below any header lines, keeping its
+name). Once they approve, `dot-ai mail send NAME` sends it; if they don't,
+`dot-ai mail rm NAME` drops it. When unsure, hold. Under `mail.review: all`
+in `.ai/config.yml`, everything is held. Helpers (subagents, other
+sessions on the project) never send: they draft with `--by "<who>"`, and
+the lead reviews the draft as its own before sending it.
 
 **Receiving.** The hooks tell you when mail arrives in `.ai/mail/inbox/`:
-process it as Processing the inbox says. When the user says "check mail"
-(agent mail, not email), look there. The hooks also tell you when mail you
-sent has been read; nothing needs doing unless you were waiting on it.
+deal with each message as Processing the inbox says, then file it with
+`dot-ai mail done NAME` (its file name or its id). When the user says
+"check mail" (agent mail, not email), `dot-ai mail check` lists the inbox.
+The hooks also tell you when mail you sent has been read; nothing needs
+doing unless you were waiting on it.
 
 **The record.** `sent/` and `received/` are committed and never edited:
 together they are everything this project said and was told. Drafts, the
@@ -172,17 +183,14 @@ drafts by name.
 **Topics** (`#datadungeon`, `#arcana.releases`) are logs any project can
 read; reading takes nothing away. In the shell, quote the name: `'#name'`.
 
-- **Post** with an outbox file addressed to the topic
-  (`20261024-221500Z-#arcana.releases--v0.21.2.md`), held or not by the
+- **Post** with `dot-ai mail send '#name' "what about"`, held or not by the
   same rules. A post reaches every reader, so when unsure, hold.
-- **Read** with `dot-ai-mail read '#name'`: the posts you haven't read yet.
+- **Read** with `dot-ai mail read '#name'`: the posts you haven't read yet.
   Take what matters into the notes.
-- **Make** a topic first, once: `dot-ai-mail topic '#name' "what it's
-  for"`. `dot-ai-mail topic` alone lists them.
+- **Make** a topic first, once: `dot-ai mail topic '#name' "what it's
+  for"`. `dot-ai mail topic` alone lists them.
 - **Follow** a topic by listing it under `mail.follow` in `.ai/config.yml`
   (`follow: ["#datadungeon"]`): the hooks tell you of new posts.
-
-Where Arcana is the carrier, `arcana mail` takes the same commands.
 
 ## Transcripts
 
@@ -269,17 +277,20 @@ the order they're listed (oldest first), and for each one:
    the right topics rather than pasted in whole. A message that is
    reference material to consult again (a spec, a design, a patch) needn't
    be summarized: cite it from the notes by its path in `mail/received/`.
-2. Move it, unchanged and under the same name, to `.ai/mail/received/`.
+2. File it: `dot-ai mail done NAME` moves it, unchanged, to
+   `.ai/mail/received/`.
 3. Commit the notes and the message together
    (`git -C .ai add memory/<note>.md mail/received/<file>`).
 
 `received/` is never edited: it's the record of exactly what other projects
 said, and with `sent/` it lists the whole correspondence in order. In a
-public repo, a message with private details is summarized and then deleted
-instead of filed, so the original is never committed.
+public repo, a message with private details is summarized in the notes and
+then dropped with `dot-ai mail rm NAME` instead of filed, so the original is
+never committed.
 
-A file from a topic (its sender starts with `#`) isn't mail: see
-`references/mail.md`.
+A notice from a topic (its sender starts with `#`) isn't mail: read the
+post it points to if it bears on the work, and `dot-ai mail done` removes
+it.
 
 ## Intake and Outtake
 

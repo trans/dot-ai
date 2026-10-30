@@ -2,13 +2,13 @@
 default:
     @just --list
 
-# Test dot-ai-mail (SH="zsh --emulate sh" just test, to try another shell)
+# Test dot-ai (SH="zsh --emulate sh" just test, to try another shell)
 test:
-    sh tests/dot-ai-mail.sh
+    sh tests/dot-ai.sh
 
 # Run the same tests against Arcana's carrier (ARCANA=/path/to/arcana, else the one on PATH)
 test-arcana:
-    CARRIER=arcana sh tests/dot-ai-mail.sh
+    CARRIER=arcana sh tests/dot-ai.sh
 
 # Check the plugin and marketplace manifests (needs Claude Code)
 validate:

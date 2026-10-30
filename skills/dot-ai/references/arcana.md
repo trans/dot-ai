@@ -19,8 +19,8 @@ available (`arcana_directory`, `arcana_deliver`, …). In Claude Code they're
   hooks register that project's handle and say so.
 - **Services on the bus** (a tool, `help`) aren't mail: call them with
   `arcana_deliver` to the service's address.
-- **Mail always goes through the outbox**, as the skill's Mail section
-  says, whichever carrier the machine has: never `arcana_deliver` to a
+- **Mail always goes through `dot-ai mail send`**, as the skill's Mail
+  section says, whichever carrier the machine has: never `arcana_deliver` to a
   project's agent or `arcana_publish` to a topic. Where Arcana isn't the
   carrier (`git config ai.carrier` unset or `local`), they refuse.
 - **Mail left on the bus** (sent there before, or by a session that hadn't
@@ -33,11 +33,10 @@ available (`arcana_directory`, `arcana_deliver`, …). In Claude Code they're
 
 ## Where Arcana is the carrier
 
-Only on a machine with `ai.carrier` set to `arcana`; dot-ai-mail then stays
-out of mail. Everything in the skill holds, with `arcana mail` in place of
-`dot-ai-mail`: `arcana mail deliver`, `check`, `topic`, `read` and `find`
-take the same arguments and print the same lines, and Arcana's hooks
-deliver and tell of mail as dot-ai-mail's do. Arcana also reaches further:
+Only on a machine with `ai.carrier` set to `arcana`. Everything in the skill
+holds: `dot-ai`'s commands hand the delivering and the topics to `arcana
+mail`, which keeps the same files and prints the same lines, and Arcana's
+hooks deliver and tell of mail as `dot-ai`'s do. Arcana also reaches further:
 a message for an address no project on this machine has goes over the bus,
 to an agent registered there, and says so (`delivered: NAME to @x over the
 Arcana bus`).

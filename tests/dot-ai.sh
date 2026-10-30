@@ -1,13 +1,15 @@
 #!/bin/sh
 # Tests for a mail carrier (spec/mail.md): builds projects in a temporary
 # directory and checks delivery, recovery, topics, receipts and the hooks.
-# Run: just test. They test dot-ai-mail (skills/dot-ai/scripts/dot-ai-mail),
-# or, with CARRIER=arcana, Arcana's `arcana mail` and `arcana hook` (the
-# arcana on PATH, or ARCANA=/path/to/arcana), which must pass the same.
+# Run: just test. They test dot-ai's mail commands as the carrier
+# (skills/dot-ai/scripts/dot-ai), or, with CARRIER=arcana, Arcana's `arcana
+# mail` and `arcana hook` (the arcana on PATH, or ARCANA=/path/to/arcana),
+# which must pass the same. dot-ai's own commands (send, draft, done, rm)
+# are tested under either carrier: they hand delivery to it.
 SH=${SH:-sh} # the shell to test under: SH="zsh --emulate sh", say
 CARRIER=${CARRIER:-local}
-M=$(cd "$(dirname "$0")/.." && pwd -P)/skills/dot-ai/scripts/dot-ai-mail
-T=$(mktemp -d "${TMPDIR:-/tmp}/dot-ai-mail-test.XXXXXX") || exit 1
+M=$(cd "$(dirname "$0")/.." && pwd -P)/skills/dot-ai/scripts/dot-ai
+T=$(mktemp -d "${TMPDIR:-/tmp}/dot-ai-test.XXXXXX") || exit 1
 trap 'rm -rf "$T"' EXIT
 P=$T/projects
 printf '[ai]\n\tpath = %s\n' "$P" >"$T/gitconfig"
@@ -17,16 +19,19 @@ mkdir -p "$T/run"
 unset CLAUDE_PROJECT_DIR PLUGIN_ROOT
 
 # The carrier's commands, and what it calls itself in Via: and Sent:
+dotai() { $SH "$M" mail "$@"; } # dot-ai's own, whichever the carrier
 if [ "$CARRIER" = arcana ]; then
   ARCANA=${ARCANA:-arcana}
   ARCANA_URL=http://127.0.0.1:9 # no bus: Arcana carries mail without one
-  export ARCANA_URL
+  # dot-ai hands delivery to the arcana on PATH
+  PATH=$(cd "$(dirname "$(command -v "$ARCANA")")" && pwd -P):$PATH
+  export ARCANA_URL PATH
   carry() { "$ARCANA" mail "$@"; }
   carry_hook() { "$ARCANA" hook "$@"; }
   git config --file "$T/gitconfig" ai.carrier arcana
   VIA=arcana OTHER=local
 else
-  carry() { $SH "$M" "$@"; }
+  carry() { $SH "$M" mail "$@"; }
   carry_hook() { $SH "$M" hook "$@"; }
   VIA=local OTHER=arcana
 fi
@@ -109,6 +114,7 @@ chmod 755 "$P/omega/.ai/mail/inbox"
 hook() { printf '{"session_id":"%s","cwd":"%s"}' "$2" "$3" | carry_hook "$1" --agent "$4"; }
 out=$(hook session-start s1 "$P/beta" claude)
 check "session-start: lists the inbox" 'printf "%s" "$out" | grep -q "\"additionalContext\":\"You have mail: 2 messages waiting"'
+[ "$CARRIER" = arcana ] || check "session-start: says how to file" 'printf "%s" "$out" | grep -q "mail done NAME"'
 check "stop: quiet when nothing is new" 'hook stop s1 "$P/beta" claude 2>/dev/null'
 printf 'x\n' >"$A/outbox/20261015-160000Z-@beta--news.md"
 hook stop a1 "$P/alpha" claude 2>/dev/null
@@ -195,6 +201,44 @@ check "follow: a new post keeps Claude going once" '[ $? -eq 2 ] && grep -q "4 n
 printf 'handle: "@beta"\nmail:\n  follow: ["#news"]  # flow\n' >"$P/beta/.ai/config.yml"
 check "follow: a flow list, after the place" 'hook stop b1 "$P/beta" claude 2>&1 | grep -q "1 new post in #news"'
 
+# Sending with dot-ai: it names the file, writes it and has it delivered
+out=$(cd "$P/alpha" && printf 'Plans for the schema.\n' | dotai send @beta "Schema plans!")
+n=$(ls "$A/sent" | grep -- "-@beta--schema-plans.md$")
+check "send: named from the topic, delivered" '[ -n "$n" ] && printf "%s\n" "$out" | grep -qx "delivered: $n to @beta"'
+check "send: filed with the message as given" '[ "$(tail -n 2 "$A/sent/$n")" = "$(printf "\nPlans for the schema.")" ] && ! grep -q "^Re: " "$A/sent/$n"'
+out=$(cd "$P/alpha" && printf 'Thanks.' | dotai send beta thanks --re 1a2b3c4d)
+n=$(ls "$A/sent" | grep -- "-@beta--thanks.md$")
+check "send: --re heads it, a newline ends it" '[ "$(sed -n 1p "$A/sent/$n")" = "Re: 1a2b3c4d" ] && [ "$(tail -n 1 "$A/sent/$n")" = "Thanks." ] && f=$(ls "$B/inbox/"*--thanks-*.md) && grep -qx "Re: 1a2b3c4d" "$f"'
+check "send: a post" '(cd "$P/alpha" && printf "Fifth.\n" | dotai send "#news" "the fifth") | grep -q "^posted: .*-#news--the-fifth.md to #news as post 5$"'
+before=$(count "$A/outbox")
+check "send: refuses a bad address, a bad --re, an empty message" '! (cd "$P/alpha" && printf "x\n" | dotai send "Beta Team" x 2>/dev/null) && ! (cd "$P/alpha" && printf "x\n" | dotai send @beta x --re "the schema" 2>/dev/null) && ! (cd "$P/alpha" && printf "  \n" | dotai send @beta x 2>/dev/null) && [ "$(count "$A/outbox")" = "$before" ]'
+inbox=$(count "$B/inbox")
+out=$(cd "$P/alpha" && printf 'We ship Friday.\n' | dotai draft @beta friday --why "promises a date")
+d=$(ls "$A/drafts")
+check "draft: waits in drafts, saying how to send it" 'printf "%s\n" "$out" | grep -q "^drafted: $d, in .ai/mail/drafts/: tell the user; once they approve, dot-ai mail send $d$" && [ "$(sed -n 1p "$A/drafts/$d")" = "Held: promises a date" ] && [ "$(count "$B/inbox")" = "$inbox" ]'
+check "send: --why is for a draft" '! (cd "$P/alpha" && printf "x\n" | dotai send @beta x --why y 2>/dev/null)'
+out=$(cd "$P/alpha" && dotai send "$d")
+check "send NAME: the draft, without its Held line" 'printf "%s\n" "$out" | grep -qx "delivered: $d to @beta" && [ "$(count "$A/drafts")" = 0 ] && ! grep -q "^Held: " "$A/sent/$d" && [ "$(tail -n 2 "$A/sent/$d")" = "$(printf "\nWe ship Friday.")" ]'
+(cd "$P/alpha" && printf 'From a helper.\n' | dotai draft @beta helped --by "a helper" --why "a promise" >/dev/null)
+d=$(ls "$A/drafts")
+(cd "$P/alpha" && dotai send "$A/drafts/$d" >/dev/null)
+check "send NAME: keeps By, by path" '[ "$(sed -n 1p "$A/sent/$d")" = "By: a helper" ] && ! grep -q "^Held: " "$A/sent/$d"'
+check "send NAME: no such draft" '! (cd "$P/alpha" && dotai send nosuch.md 2>/dev/null)'
+(cd "$P/alpha" && printf 'Never mind.\n' | dotai draft @beta nevermind --by "a helper" >/dev/null)
+check "rm: a draft" '(cd "$P/alpha" && dotai rm "$(ls "$A/drafts")") | grep -q "never sent" && [ "$(count "$A/drafts")" = 0 ]'
+
+# Dealing with the inbox
+f=$(ls "$B/inbox" | grep -- "--friday-") id=${f%.md} id=${id##*-}
+check "done: by id, filed under received" '(cd "$P/beta" && dotai done "$id") | grep -qx "filed: .ai/mail/received/$f: commit it with the notes it went into" && [ -f "$B/received/$f" ] && [ ! -e "$B/inbox/$f" ]'
+f=$(ls "$B/inbox" | grep -- "--helped-")
+check "done: by path, from anywhere" 'dotai done "$B/inbox/$f" >/dev/null && [ -f "$B/received/$f" ]'
+f=$(ls "$B/inbox" | grep -- "--thanks-" | head -n 1)
+check "rm: out of the inbox, not filed" '(cd "$P/beta" && dotai rm "$f") | grep -q "^removed: $f, not filed" && [ ! -e "$B/inbox/$f" ] && [ ! -e "$B/received/$f" ]'
+printf 'From: #news\n\nA notice.\n' >"$B/inbox/20261015-120000Z-#news--notice-12345678.md"
+check "done: a topic's notice is removed, not filed" '(cd "$P/beta" && dotai done 12345678) | grep -q "a notice from a topic" && [ ! -e "$B/received/20261015-120000Z-#news--notice-12345678.md" ]'
+check "done: nothing by that name" '! (cd "$P/beta" && dotai done nosuch.md 2>/dev/null)'
+check "dot-ai-mail: the old name still works" '[ "$($SH "$(dirname "$M")/dot-ai-mail" find beta)" = "$P/beta" ] && $SH "$(dirname "$M")/dot-ai-mail" version | grep -q "^dot-ai "'
+
 # Receipts
 project rho 'handle: rho'
 project sigma 'handle: sigma'
@@ -229,10 +273,19 @@ check "stop: told with something else to say" '[ $? -eq 2 ] && grep -q "sent 1 m
 mv "$S/inbox/"*--four-*.md "$S/received/"
 check "session-start: tells of receipts" 'hook session-start r3 "$P/rho" claude | grep -q "@sigma read 20261016-100400Z-@sigma--four.md" && [ ! -e "$R/outbox/.receipts" ]'
 
-# Another carrier: this one stays out of mail
+# Another carrier: Arcana stays out of mail under dot-ai's; dot-ai hands
+# the carrier's work to Arcana's, and refuses one it doesn't know
 git config --file "$T/gitconfig" ai.carrier $OTHER
 printf 'x\n' >"$A/outbox/20261015-230000Z-@beta--carried.md"
-check "carrier: deliver stays out" '! (cd "$P/alpha" && carry deliver 2>/dev/null) && [ -f "$A/outbox/20261015-230000Z-@beta--carried.md" ]'
+if [ "$CARRIER" = arcana ]; then
+  check "carrier: deliver stays out" '! (cd "$P/alpha" && carry deliver 2>/dev/null) && [ -f "$A/outbox/20261015-230000Z-@beta--carried.md" ]'
+else
+  mkdir -p "$T/bin" && printf '#!/bin/sh\nprintf "handed: %%s\\n" "$*"\n' >"$T/bin/arcana" && chmod +x "$T/bin/arcana"
+  check "carrier: deliver is handed to arcana" '[ "$(cd "$P/alpha" && PATH=$T/bin:$PATH && carry deliver)" = "handed: mail deliver" ] && [ -f "$A/outbox/20261015-230000Z-@beta--carried.md" ]'
+  git config --file "$T/gitconfig" ai.carrier pigeon
+  check "carrier: one dot-ai can't hand to is refused" '! (cd "$P/alpha" && carry deliver 2>/dev/null)'
+  git config --file "$T/gitconfig" ai.carrier $OTHER
+fi
 check "carrier: the hooks are quiet" 'hook stop a9 "$P/alpha" claude 2>/dev/null && [ -z "$(hook prompt a9 "$P/alpha" claude)" ] && [ -f "$A/outbox/20261015-230000Z-@beta--carried.md" ] && [ -s "$A/outbox/.receipts" ]'
 git config --file "$T/gitconfig" ai.carrier $CARRIER
 

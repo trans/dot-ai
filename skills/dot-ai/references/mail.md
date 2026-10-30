@@ -15,11 +15,12 @@ Neither folder is ever edited. Topics are logs anyone reads, not mail
 
 Mail is carried by the machine's **carrier**, one per machine, chosen by
 git config's `ai.carrier` (`git config ai.carrier`): unset or `local` is
-dot-ai-mail, which this skill ships (`scripts/dot-ai-mail`); `arcana` is
-Arcana (`arcana mail`, the same commands; see `references/arcana.md`).
-Both keep to the same files and locks, so a change of carrier moves
-nothing. A carrier that isn't the machine's stays out of mail, and says
-so if run.
+`dot-ai` itself (`scripts/dot-ai`, which this skill ships); `arcana` is
+Arcana (see `references/arcana.md`). Both keep to the same files and locks,
+so a change of carrier moves nothing. `dot-ai`'s commands are the same
+under either: where Arcana carries the mail, `dot-ai` hands it the
+delivering and the topics (`arcana mail`), and Arcana stays out of mail
+where `dot-ai` carries it.
 
 Agents write only into their own project's `.ai/mail/`. Only the carrier
 writes into another project's `.ai/` or into the topics (or the lead,
@@ -33,7 +34,7 @@ machine.
 
 An outbound file (drafts, outbox, sent) is named
 `<time>-<address>--<topic>.md`, and keeps that name as it moves between
-folders. The time is when it was written, in UTC, so every mail folder
+folders. `dot-ai mail send` names and writes it. The time is when it was written, in UTC, so every mail folder
 lists in the order things happened. The address runs from the `@` (a
 topic's, from the `#`) to the first `--`.
 
@@ -62,13 +63,13 @@ message in either project's folders.
 
 ## Delivery
 
-`deliver` takes each message in the outbox to its recipient's
+`dot-ai mail deliver` (which `send` runs) takes each message in the outbox to its recipient's
 `.ai/mail/inbox/` (a post, to its topic, numbered), then files the
 original under `.ai/mail/sent/` with `Sent:` and `Id:` lines (and
 `Post:`). It prints a line for each: `delivered:`, `posted:`, or `left in
 the outbox:` and why. Installed as a plugin, the skill's session hooks
 deliver at the end of each turn and tell you when mail arrives; without
-the plugin, `dot-ai-mail hooks` prints them to add by hand.
+the plugin, `dot-ai hooks` prints them to add by hand.
 
 ### When a message is left in the outbox
 
@@ -78,20 +79,21 @@ the user the reason.
 
 | It says | What to do |
 |---|---|
-| no project on this machine has the address @x | Check the address with `dot-ai-mail find` (every project) or `dot-ai-mail find x`. If it's misspelt, rename the file. Otherwise tell the user: the project may have no `.ai/`, or sit outside `ai.path`. |
+| no project on this machine has the address @x | Check the address with `dot-ai mail find` (every project) or `dot-ai mail find x`. If it's misspelt, rename the file. Otherwise tell the user: the project may have no `.ai/`, or sit outside `ai.path`. |
 | two projects have the address @x | Tell the user: two projects' configs give the same handle. |
 | @x (DIR) has no .ai/mail/inbox/ | Tell the user: that project's `.ai/` has no mail folders. |
-| there's no topic #x | Check the name with `dot-ai-mail topic`. If it's misspelt, rename the file; if the topic is yours to make, make it; otherwise ask. |
+| there's no topic #x | Check the name with `dot-ai mail topic`. If it's misspelt, rename the file; if the topic is yours to make, make it; otherwise ask. |
 | its name isn't <time>-<address>--<topic>.md, or X isn't an address | Rename the file (it's yours), then deliver again. |
 | its Re: line isn't a message's id or a topic's post | Fix the `Re:` line, then deliver again. |
 | couldn't write to DIR/ (from a sandbox, leave it…) | Run inside a sandbox (Codex's), `deliver` can't write into other projects. Leave it: the hooks, which run outside the sandbox, deliver it when the turn ends. |
 | busy: another delivery from this outbox is running | Nothing: the next run takes it. |
 | error: NAME went to @x, but couldn't be filed under .ai/mail/sent/ | It went: don't send it again. Tell the user. |
-| this machine's carrier is X | dot-ai-mail stays out of mail here: use that carrier's command. |
+| this machine's carrier is X, which dot-ai can't hand mail to | Tell the user: `git config ai.carrier` names a carrier `dot-ai` doesn't know. |
+| this machine's carrier is arcana, but there's no arcana command | Tell the user: Arcana isn't installed here, or `ai.carrier` is wrong. |
 
 ### Delivering by hand
 
-Only where dot-ai-mail can't run at all (no `sh`, as on Windows), the lead
+Only where `dot-ai` can't run at all (no `sh`, as on Windows), the lead
 delivers:
 
 1. Find the recipient's project (the skill's Other projects). If it isn't
@@ -144,8 +146,8 @@ keep topics elsewhere.
 - **A notice from a topic** (an inbox file whose sender starts with `#`)
   came from a topic on the Arcana bus that this project subscribed to
   there. It isn't mail and is never filed: read the post it points to if
-  it bears on the work, take what matters into the notes, and delete the
-  notice.
+  it bears on the work, take what matters into the notes, and
+  `dot-ai mail done` removes the notice.
 - **Mail from the Arcana bus** (`Via: arcana`), sent there before Arcana
   stopped carrying mail on this machine, is put in the inbox by Arcana's
   hooks: process it like any other.

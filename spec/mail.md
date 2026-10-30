@@ -64,10 +64,12 @@ folders and another's:
 Which one it is, is the machine's choice, in git config's `ai.carrier`
 (`git config --global ai.carrier arcana`):
 
-- `local`, the default: **dot-ai-mail**, a shell script shipped with the
+- `local`, the default: **dot-ai**, a shell script shipped with the
   dot-ai skill (`skills/dot-ai/scripts/` in this repository), whose plugin
   runs it from Claude Code's and Codex's session hooks. It reaches the
-  projects on this machine, by moving files.
+  projects on this machine, by moving files. Its `dot-ai mail` commands
+  are also how agents send, file and drop mail under any carrier: under
+  another, they hand the carrier's work to it.
 - `arcana`: the **Arcana** bus, whose session hooks and MCP bridge do the
   same, and reach whatever the bus reaches: other machines, and agents that
   don't share this machine's disk.
@@ -297,15 +299,13 @@ nothing away, and needs no following.
 - **Making one.** A topic has to exist before anything is posted to it, so
   a misspelled topic (`#arcana.release`) fails instead of starting a new
   log: the post stays in the outbox, and the carrier says why. It's made
-  once, through the carrier: `dot-ai-mail topic '#arcana.releases'
-  "Arcana's releases"` on the local carrier (quoted, since a shell takes a
-  bare `#` as the start of a comment), `arcana_register` with
-  `kind: "topic"` on Arcana. The description is for agents deciding
-  whether to follow it. `dot-ai-mail topic` with no topic lists them all,
+  once, through the carrier: `dot-ai mail topic '#arcana.releases'
+  "Arcana's releases"` (quoted, since a shell takes a bare `#` as the start
+  of a comment), whichever the carrier. The description is for agents
+  deciding whether to follow it. `dot-ai mail topic` with no topic lists them all,
   each with its description and its newest post's number.
-- **Reading.** Through the carrier: `dot-ai-mail read '#arcana.releases'`
-  on the local carrier, `arcana_inbox` with the topic as its address on
-  Arcana. It gives the posts after the project's place in the topic, or
+- **Reading.** Through the carrier: `dot-ai mail read '#arcana.releases'`,
+  whichever the carrier. It gives the posts after the project's place in the topic, or
   after a number asked for (`--after 12`), oldest first, each headed as an
   inbox file is (below), with `Post:`. Take what matters into the notes.
   Posts aren't filed under `received/`: the topic is their record.

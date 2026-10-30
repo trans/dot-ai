@@ -1,12 +1,12 @@
 {
-  "description": "dot-ai-mail: deliver .ai/mail/outbox to the projects on this machine, and tell the agent when mail is waiting, and when mail it sent has been read",
+  "description": "dot-ai: deliver .ai/mail/outbox to the projects on this machine, and tell the agent when mail is waiting, and when mail it sent has been read",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai-mail\" hook session-start",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai\" hook session-start",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai-mail\" hook stop",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai\" hook stop",
             "timeout": 10
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai-mail\" hook prompt",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai\" hook prompt",
             "timeout": 10
           }
         ]
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai-mail\" hook session-end",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/skills/dot-ai/scripts/dot-ai\" hook session-end",
             "timeout": 10
           }
         ]

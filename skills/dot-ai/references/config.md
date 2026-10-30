@@ -43,8 +43,8 @@ Per-person settings that hold across projects live in git config instead:
 `ai.machine`, this machine's name; `ai.path`, the directories to search
 for projects when delivering mail (multi-valued:
 `git config --global --add ai.path ~/Projects`), the first of which keeps
-the topics; and `ai.carrier`, what carries the mail (`local`, dot-ai-mail,
-when unset; or `arcana`).
+the topics; and `ai.carrier`, what carries the mail (`local`, `dot-ai`
+itself, when unset; or `arcana`).
 
 `.ai/config.yml` lives on the `ai` branch. A checkout without the `.ai`
 worktree has no config, which readers treat like an empty one.
