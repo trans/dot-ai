@@ -1101,9 +1101,9 @@ cmd_init() {
     [ ! -s "$ign" ] || [ -z "$(tail -c 1 "$ign")" ] || printf '\n' >>"$ign"
     printf '/.ai/\n' >>"$ign"
     if git -C "$top" add .gitignore && git -C "$top" commit -q -m "Ignore .ai/, the ai branch's worktree" -- .gitignore; then
-      printf 'ignored /.ai/ in the checkout'\''s .gitignore, and committed that alone\n'
+      printf 'added .ai/ to the checkout'\''s .gitignore, and committed that alone\n'
     else
-      printf 'ignored /.ai/ in the checkout'\''s .gitignore: commit it\n'
+      printf 'added .ai/ to the checkout'\''s .gitignore: commit it\n'
     fi
   fi
 

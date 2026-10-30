@@ -12,7 +12,7 @@ between projects' agents, and session transcripts.
 
 `.ai/` lives on the project repository's **`ai` branch**, an orphan branch
 that shares no history with the code, checked out into `.ai/` as a git
-worktree. The code checkout ignores `/.ai/`. Notes stay out of the code's
+worktree, which the code checkout's `.gitignore` leaves out. Notes stay out of the code's
 history and its CI (the branch has no workflows), and there is no second
 repository to keep: one clone carries both. Pushed, the branch reaches
 every agent on every machine, including the next session after a crash.
@@ -331,8 +331,8 @@ and other machines push too. Push the branch by name
 1. Ask the user for the project's handle (suggest the directory's name),
    and, if the repository is public, whether transcripts should also be
    encrypted (`transcript.encrypt`, see Transcripts).
-2. In the project, run `dot-ai init HANDLE`. It ignores `/.ai/` in the
-   code checkout (committing only that), makes the `ai` branch with its
+2. In the project, run `dot-ai init HANDLE`. It adds `.ai/` to the code
+   checkout's `.gitignore` (committing only that), makes the `ai` branch with its
    worktree at `.ai/` (the config, the memory README, the mail folders),
    makes `Intake/` and `Outtake/`, and commits. It refuses a handle
    another project on this machine has. If it fails in a way you can't
