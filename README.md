@@ -49,6 +49,19 @@ skill installed by hand (`~/.claude/skills/dot-ai`, `~/.codex/skills/dot-ai`)
 should be removed, or the skill loads twice. To try a change from a
 checkout, `claude --plugin-dir .` loads it for one session.
 
+Agents run `dot-ai` from inside the plugin. To run it yourself, put it on
+your PATH once, by running its `install` from the plugin (or asking an
+agent to):
+
+```sh
+sh ~/.claude/plugins/cache/dot-ai/dot-ai/<version>/skills/dot-ai/scripts/dot-ai install
+```
+
+That writes `~/.local/bin/dot-ai`, which runs the newest copy either tool
+has installed, so plugin updates reach it. Then `dot-ai init` in a
+project's git checkout sets up its `.ai/`, and `dot-ai mail help` lists
+the mail commands.
+
 | Document | Covers |
 |---|---|
 | [Layout](spec/layout.md) | Where `.ai/` lives, its directories, what is committed and what stays on the machine, how tools commit |

@@ -12,7 +12,7 @@ M=$(cd "$(dirname "$0")/.." && pwd -P)/skills/dot-ai/scripts/dot-ai
 T=$(mktemp -d "${TMPDIR:-/tmp}/dot-ai-test.XXXXXX") || exit 1
 trap 'rm -rf "$T"' EXIT
 P=$T/projects
-printf '[ai]\n\tpath = %s\n' "$P" >"$T/gitconfig"
+printf '[ai]\n\tpath = %s\n[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n' "$P" >"$T/gitconfig"
 GIT_CONFIG_GLOBAL=$T/gitconfig XDG_RUNTIME_DIR=$T/run XDG_STATE_HOME=$T/state
 export GIT_CONFIG_GLOBAL XDG_RUNTIME_DIR XDG_STATE_HOME
 mkdir -p "$T/run"
@@ -272,6 +272,39 @@ hook stop r2 "$P/rho" claude 2>"$T/err"
 check "stop: told with something else to say" '[ $? -eq 2 ] && grep -q "sent 1 message" "$T/err" && grep -q "@sigma read 20261016-100200Z-@sigma--three.md" "$T/err" && ! grep -q -- "--three.md$" "$R/outbox/.receipts"'
 mv "$S/inbox/"*--four-*.md "$S/received/"
 check "session-start: tells of receipts" 'hook session-start r3 "$P/rho" claude | grep -q "@sigma read 20261016-100400Z-@sigma--four.md" && [ ! -e "$R/outbox/.receipts" ]'
+
+# Setting up: init and install (dot-ai's own, under either carrier)
+top() { $SH "$M" "$@"; }
+mkdir -p "$P/newproj" && git -C "$P/newproj" init -q
+out=$(cd "$P/newproj" && top init)
+check "init: .ai/ on its own ai branch, committed" '[ "$(git -C "$P/newproj/.ai" rev-parse --abbrev-ref HEAD)" = ai ] && [ -z "$(git -C "$P/newproj/.ai" status --porcelain)" ] && git -C "$P/newproj/.ai" ls-files | grep -qx mail/inbox/.gitkeep'
+check "init: the handle from the checkout's name, found by mail" 'grep -q "^handle: newproj " "$P/newproj/.ai/config.yml" && [ "$(carry find newproj)" = "$P/newproj" ]'
+check "init: the checkout ignores .ai/, committed alone" 'grep -qx "/.ai/" "$P/newproj/.gitignore" && [ -z "$(git -C "$P/newproj" status --porcelain)" ] && [ "$(git -C "$P/newproj" rev-list --count HEAD)" = 1 ]'
+check "init: Intake and Outtake, never committed" '[ "$(cat "$P/newproj/Intake/.gitignore")" = "*" ] && [ -f "$P/newproj/Outtake/.gitignore" ]'
+check "init: once" '! (cd "$P/newproj" && top init 2>/dev/null)'
+mkdir -p "$P/another" && git -C "$P/another" init -q
+check "init: a handle that's taken is refused, touching nothing" '! (cd "$P/another" && top init beta 2>/dev/null) && [ ! -e "$P/another/.ai" ] && [ ! -e "$P/another/.gitignore" ]'
+mkdir -p "$T/oldgit" "$P/oldproj" && git -C "$P/oldproj" init -q
+printf '#!/bin/sh\ncase " $* " in *" worktree add "*--orphan*) exit 129 ;; esac\nexec %s "$@"\n' "$(command -v git)" >"$T/oldgit/git"
+chmod +x "$T/oldgit/git"
+check "init: git before 2.42" '(cd "$P/oldproj" && PATH=$T/oldgit:$PATH top init >/dev/null) && [ -z "$(git -C "$P/oldproj/.ai" status --porcelain)" ] && [ "$(git -C "$P/oldproj/.ai" ls-files | grep -c -v "^mail/\|^memory/\|^config.yml$\|^.gitignore$")" = 0 ] && [ "$(git -C "$P/oldproj/.ai" rev-list --count ai)" = 1 ]'
+check "init: not in a git checkout" '! (cd "$T" && top init x 2>/dev/null)'
+mkdir -p "$T/out" && git -C "$T/out" init -q
+check "init: outside ai.path, says so" '(cd "$T/out" && top init outsider) | grep -q "outside ai.path"'
+git clone -q "$P/newproj" "$T/clone"
+check "init: a clone checks the ai branch out" '(cd "$T/clone" && top init) | grep -q "checked out the ai branch .*: this project is @newproj" && [ -f "$T/clone/.ai/config.yml" ]'
+top install "$T/bin2" >/dev/null
+check "install: this copy, while no plugin has one" '[ -x "$T/bin2/dot-ai" ] && [ "$(CLAUDE_CONFIG_DIR=$T/claude CODEX_HOME=$T/codex "$T/bin2/dot-ai" version)" = "$(top version)" ]'
+for v in 0.9.0 0.10.0; do
+  mkdir -p "$T/claude/plugins/cache/dot-ai/dot-ai/$v/skills/dot-ai/scripts"
+  printf 'echo copy %s\n' "$v" >"$T/claude/plugins/cache/dot-ai/dot-ai/$v/skills/dot-ai/scripts/dot-ai"
+done
+mkdir -p "$T/codex/plugins/cache/dot-ai/dot-ai/0.9.5/skills/dot-ai/scripts"
+printf 'echo copy 0.9.5\n' >"$T/codex/plugins/cache/dot-ai/dot-ai/0.9.5/skills/dot-ai/scripts/dot-ai"
+check "install: the newest plugin copy, from either tool" '[ "$(CLAUDE_CONFIG_DIR=$T/claude CODEX_HOME=$T/codex "$T/bin2/dot-ai")" = "copy 0.10.0" ]'
+check "install: again, over its own" 'top install "$T/bin2" >/dev/null'
+mkdir -p "$T/bin3" && printf '#!/bin/sh\n' >"$T/bin3/dot-ai"
+check "install: leaves a dot-ai it didn't write" '! top install "$T/bin3" 2>/dev/null && [ "$(cat "$T/bin3/dot-ai")" = "#!/bin/sh" ]'
 
 # Another carrier: Arcana stays out of mail under dot-ai's; dot-ai hands
 # the carrier's work to Arcana's, and refuses one it doesn't know

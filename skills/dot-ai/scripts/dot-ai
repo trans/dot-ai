@@ -40,6 +40,13 @@ dot-ai: a project's .ai/ (its notes, its mail, the machine's topics)
                                the posts after this project's place in TOPIC,
                                or after post N, and move the place on
   dot-ai mail find [ADDRESS]   where ADDRESS's project is, or every project found
+  dot-ai init [HANDLE] [DIR]   set up .ai/ in the git checkout at or above DIR:
+                               the ai branch as its worktree, the config (HANDLE,
+                               else the checkout's name), the mail folders, and
+                               Intake/ and Outtake/; on a clone of a project
+                               that has one, check its ai branch out
+  dot-ai install [BINDIR]      put dot-ai on PATH: BINDIR/dot-ai (by default
+                               ~/.local/bin) runs the newest copy installed
   dot-ai hook EVENT [--agent claude|codex]
                                what the session hooks run: session-start, stop,
                                prompt, session-end (reads the hook's JSON on
@@ -1056,6 +1063,139 @@ cmd_hook() {
   exit 2
 }
 
+# -- Setting up -----------------------------------------------------------------
+
+cmd_init() {
+  handle=${1:-} dir=${2:-.}
+  case $handle in -*) die "usage: dot-ai init [HANDLE] [DIR]" ;; esac
+  top=$(cd "$dir" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null) ||
+    die "$dir isn't in a git checkout: .ai/ is a worktree of the repository's ai branch (git init first)"
+  [ ! -e "$top/.ai" ] && [ ! -L "$top/.ai" ] || die "$top has a .ai/ already"
+  assets=$(dirname "$(self_path)")/../assets
+  [ -f "$assets/config.yml" ] || die "the skill's assets aren't beside $(self_path)"
+
+  # A clone of a project that has the branch checks it out; otherwise the
+  # handle has to be one no other project has
+  branch=
+  if git -C "$top" rev-parse -q --verify refs/heads/ai >/dev/null 2>&1; then
+    branch=ai
+  elif git -C "$top" rev-parse -q --verify refs/remotes/origin/ai >/dev/null 2>&1; then
+    branch=origin/ai
+  else
+    [ -n "$handle" ] || handle=$(fold_name "$(basename "$top")")
+    handle=${handle#@}
+    case $handle in
+      [a-z]*) case $handle in *[!a-z0-9-]*) bad=1 ;; *) bad= ;; esac ;;
+      *) bad=1 ;;
+    esac
+    [ -z "$bad" ] || die "@$handle isn't a handle: lowercase letters, digits and -, starting with a letter"
+    scan "$top"
+    if other=$(lookup "@$handle"); then
+      die "@$handle is taken: $other has it. Pick another handle"
+    fi
+  fi
+
+  # The code checkout ignores .ai/
+  ign=$top/.gitignore
+  if ! grep -qx -e '/\.ai/*' -e '\.ai/*' "$ign" 2>/dev/null; then
+    [ ! -s "$ign" ] || [ -z "$(tail -c 1 "$ign")" ] || printf '\n' >>"$ign"
+    printf '/.ai/\n' >>"$ign"
+    if git -C "$top" add .gitignore && git -C "$top" commit -q -m "Ignore .ai/, the ai branch's worktree" -- .gitignore; then
+      printf 'ignored /.ai/ in the checkout'\''s .gitignore, and committed that alone\n'
+    else
+      printf 'ignored /.ai/ in the checkout'\''s .gitignore: commit it\n'
+    fi
+  fi
+
+  case $branch in
+    ai | origin/ai)
+      if [ "$branch" = ai ]; then
+        git -C "$top" worktree add -q .ai ai
+      else
+        git -C "$top" worktree add -q --track -b ai .ai origin/ai
+      fi || die "couldn't check the ai branch out at $top/.ai"
+      h=$(handle_of "$top") || h='(unreadable: see .ai/config.yml)'
+      printf 'checked out the ai branch at %s/.ai: this project is @%s\n' "$top" "$h"
+      return 0
+      ;;
+  esac
+
+  # Before git 2.42, worktree add has no --orphan: start detached, then empty it
+  ai=$top/.ai
+  git -C "$top" worktree add -q --orphan -b ai .ai 2>/dev/null ||
+    { git -C "$top" worktree add -q --detach .ai &&
+      git -C "$ai" checkout -q --orphan ai && git -C "$ai" rm -rfq .; } ||
+    die "couldn't make the ai branch's worktree at $ai"
+  sed "s/PROJECT/$handle/g" "$assets/config.yml" >"$ai/config.yml" &&
+    cp "$assets/gitignore" "$ai/.gitignore" &&
+    mkdir -p "$ai/memory" && cp "$assets/memory-README.md" "$ai/memory/README.md" ||
+    die "couldn't write .ai/'s first files"
+  for d in drafts outbox sent inbox received; do
+    mkdir -p "$ai/mail/$d" && : >"$ai/mail/$d/.gitkeep"
+  done
+  for d in Intake Outtake; do
+    [ -e "$top/$d" ] || { mkdir -p "$top/$d" && printf '*\n' >"$top/$d/.gitignore"; }
+  done
+  if git -C "$ai" add .gitignore config.yml memory/README.md mail &&
+    git -C "$ai" commit -q -m "Set up .ai/ for @$handle"; then
+    printf 'made .ai/ for @%s at %s/.ai, on its own ai branch, committed\n' "$handle" "$top"
+  else
+    printf 'made .ai/ for @%s at %s/.ai, on its own ai branch: commit it there\n' "$handle" "$top"
+  fi
+  # Mail finds projects under ai.path
+  roots=$(git config --get-all --type=path ai.path 2>/dev/null)
+  if [ -n "$roots" ]; then
+    under=
+    for r in $roots; do
+      r=$(cd "$r" 2>/dev/null && pwd -P) || continue
+      case $top/ in "$r"/*) under=1 ;; esac
+    done
+    [ -n "$under" ] ||
+      printf 'it'\''s outside ai.path, so mail won'\''t find it: git config --global --add ai.path DIR, for a DIR above it\n'
+  fi
+  printf 'next: say what this project'\''s agent does (description, in .ai/config.yml), put what'\''s known in .ai/memory/, and push the branch if it should be on the remote: git -C .ai push -u origin ai\n'
+}
+
+cmd_install() {
+  bindir=${1:-${XDG_BIN_HOME:-$HOME/.local/bin}}
+  target=$bindir/dot-ai
+  if [ -e "$target" ] && ! grep -q '^# Written by .dot-ai install.' "$target" 2>/dev/null; then
+    die "$target is there already, and dot-ai install didn't write it"
+  fi
+  mkdir -p "$bindir" || die "couldn't make $bindir"
+  here=$(self_path)
+  case $here in *"'"*) die "can't write a path with a ' in it: $here" ;; esac
+  {
+    printf '#!/bin/sh\n'
+    printf '# dot-ai: runs the newest dot-ai the dot-ai plugin installed, for Claude\n'
+    printf '# Code or Codex, else the one this was written from.\n'
+    printf '# Written by `dot-ai install`: delete this file to uninstall.\n'
+    printf 'here='\''%s'\''\n' "$here"
+    cat <<'EOF'
+best= bestv=
+for d in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/dot-ai/dot-ai" \
+  "${CODEX_HOME:-$HOME/.codex}/plugins/cache/dot-ai/dot-ai"; do
+  for v in "$d"/*; do
+    f=$v/skills/dot-ai/scripts/dot-ai
+    n=${v##*/}
+    [ -f "$f" ] || continue
+    case $n in [0-9]*.[0-9]*.[0-9]*) ;; *) continue ;; esac
+    if [ -z "$best" ] || [ "$(printf '%s\n%s\n' "$bestv" "$n" |
+      sort -t . -k 1,1n -k 2,2n -k 3,3n | tail -n 1)" = "$n" ]; then
+      best=$f bestv=$n
+    fi
+  done
+done
+exec sh "${best:-$here}" "$@"
+EOF
+  } >"$target.tmp" && chmod +x "$target.tmp" && mv "$target.tmp" "$target" || die "couldn't write $target"
+  printf 'installed %s: it runs the newest dot-ai installed (now %s)\n' "$target" "$("$target" version 2>/dev/null)"
+  case :$PATH: in
+    *:"$bindir":*) ;;
+    *) printf '%s isn'\''t on PATH: add it to run dot-ai by name\n' "$bindir" ;;
+  esac
+}
+
 cmd_hooks() {
   self=$(command -v dot-ai 2>/dev/null) || self="sh $(self_path)"
   case $self in /*) ;; *) self=$(cd "$(dirname "$self")" && pwd -P)/$(basename "$self") ;; esac
@@ -1104,6 +1244,8 @@ cmd_mail() {
 
 case ${1:-} in
   mail) shift && cmd_mail "$@" ;;
+  init) shift && cmd_init "$@" ;;
+  install) shift && cmd_install "$@" ;;
   hook) shift && cmd_hook "$@" ;;
   hooks) cmd_hooks ;;
   version | --version) printf 'dot-ai %s\n' "$VERSION" ;;

@@ -7,7 +7,8 @@ can't write from a sandbox for the hooks, saying so. 0.5.0 (2026-10-30,
 plugin 0.5.0) renames it `dot-ai`, with the mail commands under `dot-ai
 mail`, and adds `send`, `draft`, `done` and `rm`, so agents never name or
 move mail files themselves (the user: one interface whatever the
-carrier); `dot-ai-mail` stays as a shim for `dot-ai mail`. Tested by
+carrier), and `init` and `install`; `dot-ai-mail` stays as a shim for
+`dot-ai mail`. Tested by
 `tests/dot-ai.sh` (`just test`); its hooks ship in the dot-ai plugin
 (`hooks/hooks.json`).*
 
@@ -47,6 +48,8 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 | `dot-ai mail topic [TOPIC DESCRIPTION]` | Makes a topic with a one-line description, or, alone, lists the topics with their number of posts and descriptions. A topic is given as `'#name'` (quoted, or the shell takes it for a comment) or `name`. |
 | `dot-ai mail read TOPIC [--after N] [DIR]` | Prints the posts after the project's place in the topic (after post `N` with `--after`), oldest first, each under a `==> <file> <==` line, and moves the place on to the last one shown. |
 | `dot-ai mail find [ADDRESS]` | Where an address's project is, or every project found with its address: to see why something wasn't delivered. |
+| `dot-ai init [HANDLE] [DIR]` | Sets up `.ai/` in the git checkout at or above `DIR`: ignores `/.ai/` there (committing only that), makes the `ai` branch's worktree from the skill's assets with the handle (by default the checkout's name, folded), the mail folders, `Intake/` and `Outtake/`, and commits. Refuses a handle another project under `ai.path` has. On a clone whose branch (or `origin/ai`) exists, checks it out instead. So the agent setting it up isn't left mid-way under no address, or the wrong one (the user, 2026-10-30). |
+| `dot-ai install [BINDIR]` | Writes `BINDIR/dot-ai` (by default `~/.local/bin`), a wrapper that runs the newest copy in Claude Code's or Codex's plugin cache, else the copy that wrote it. Replaces only a file it wrote. |
 | `dot-ai hook EVENT [--agent claude\|codex]` | What the session hooks run (below): `session-start`, `stop`, `prompt`, `session-end`. The plugin's hooks name no agent: `PLUGIN_ROOT` set means Codex (Claude Code sets only `CLAUDE_*`), else `CLAUDE_PROJECT_DIR` set means Claude Code, else Codex. |
 | `dot-ai hooks` | Prints the hook entries to add to Claude Code's and Codex's settings, for use without the plugin. It doesn't edit them: JSON is the one thing `sh` can't safely rewrite. |
 

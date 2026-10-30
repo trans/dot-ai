@@ -71,8 +71,8 @@ inside it are relative to `.ai/` (`memory/release.md`, `mail/inbox/<file>`).
 ## At the start of a session, or on "resume"
 
 1. If `.ai/` is missing but the repo has an `ai` branch (`git branch -r`
-   lists `origin/ai`), ask the user whether to check it out:
-   `git worktree add .ai ai`. Otherwise bring it up to date
+   lists `origin/ai`), ask the user whether to check it out with
+   `dot-ai init` (see Mail). Otherwise bring it up to date
    (`git -C .ai pull --ff-only`); another machine may have pushed.
 2. Read `.ai/config.yml` and the memory index, then the notes that bear on
    the task. A status or handoff note is usually where "where were we?"
@@ -331,46 +331,23 @@ and other machines push too. Push the branch by name
 1. Ask the user for the project's handle (suggest the directory's name),
    and, if the repository is public, whether transcripts should also be
    encrypted (`transcript.encrypt`, see Transcripts).
-2. In the code checkout, add `/.ai/` to `.gitignore` and commit it.
-3. Create the branch and its worktree: `git worktree add --orphan -b ai .ai`
-   (git 2.42 or later).
-4. Create `.ai/.gitignore` from `assets/gitignore`, `.ai/config.yml` from
-   `assets/config.yml`, and `.ai/memory/README.md` from
-   `assets/memory-README.md`. The README restates these conventions, so
-   agents without this skill can follow them too.
-5. Create a `.gitkeep` in `.ai/mail/drafts/`, `mail/outbox/`, `mail/sent/`,
-   `mail/inbox/` and `mail/received/`. (The `.gitignore` keeps the contents
-   of drafts, outbox and inbox out of commits, but not their `.gitkeep`.)
-   In the project's own directory, create `Intake/` and `Outtake/`, each
-   with a `.gitignore` containing only `*`.
-6. Seed memory with what you already know that belongs there (status,
-   decisions in progress, a coordination note with the projects this one
-   corresponds with), a
-   note per topic, each indexed.
-7. Commit on the branch, and push it (`git -C .ai push -u origin ai`) if
+2. In the project, run `dot-ai init HANDLE`. It ignores `/.ai/` in the
+   code checkout (committing only that), makes the `ai` branch with its
+   worktree at `.ai/` (the config, the memory README, the mail folders),
+   makes `Intake/` and `Outtake/`, and commits. It refuses a handle
+   another project on this machine has. If it fails in a way you can't
+   fix, `references/setup.md` has its steps by hand.
+3. Write what the project's agent does as `description` in
+   `.ai/config.yml`, and seed memory with what you already know that
+   belongs there (status, decisions in progress, a coordination note with
+   the projects this one corresponds with), a note per topic, each
+   indexed.
+4. Commit on the branch, and push it (`git -C .ai push -u origin ai`) if
    the user agrees.
 
-On another clone, `git worktree add .ai ai` checks the branch out.
-
-## Moving an existing .ai/ onto its own branch
-
-For a project whose `.ai/` is still committed with the code:
-
-1. Make the branch from the notes' history:
-   `git subtree split --prefix=.ai -b ai`. The branch holds `.ai/`'s
-   contents at its root, with every commit that touched them.
-2. In the code checkout: `git rm -r --cached .ai`, add `/.ai/` to
-   `.gitignore`, and commit. The old notes stay in the code's history.
-3. Move the old directory aside and check the branch out:
-   `mv .ai .ai.old && git worktree add .ai ai`. Copy `arcana.token` and
-   `arcana.key` (if any) across from `.ai.old/`, and move anything in its `intake/` to the
-   project's `Intake/` (Intake and Outtake); they were never committed.
-4. On the branch: add `.gitignore` from `assets/gitignore` and the `mail/`
-   folders with their `.gitkeep`. Messages in the old `inbox/` haven't been
-   read yet: take them out of git (`git -C .ai rm -r --cached inbox`), move
-   them into `mail/inbox/`, and commit. Then process them as usual.
-5. Push the branch if the user agrees, then remove `.ai.old/` once
-   everything is across.
+On another clone, `dot-ai init` checks the branch out. For a project whose
+`.ai/` is still committed with the code, `references/setup.md` says how to
+move it onto its own branch.
 
 ## The config
 
