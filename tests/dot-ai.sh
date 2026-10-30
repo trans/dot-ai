@@ -281,6 +281,7 @@ check "init: .ai/ on its own ai branch, committed" '[ "$(git -C "$P/newproj/.ai"
 check "init: the handle from the checkout's name, found by mail" 'grep -q "^handle: newproj " "$P/newproj/.ai/config.yml" && [ "$(carry find newproj)" = "$P/newproj" ]'
 check "init: the checkout ignores .ai/, committed alone" 'grep -qx "/.ai/" "$P/newproj/.gitignore" && [ -z "$(git -C "$P/newproj" status --porcelain)" ] && [ "$(git -C "$P/newproj" rev-list --count HEAD)" = 1 ]'
 check "init: Intake and Outtake, never committed" '[ "$(cat "$P/newproj/Intake/.gitignore")" = "*" ] && [ -f "$P/newproj/Outtake/.gitignore" ]'
+check "init: a ✓ for each thing it did" '[ "$(printf "%s\n" "$out" | grep -c "^✓ ")" = 6 ] && [ "$(printf "%s\n" "$out" | grep -c -v "^✓ \|^next: ")" = 0 ]'
 check "init: once" '! (cd "$P/newproj" && top init 2>/dev/null)'
 mkdir -p "$P/another" && git -C "$P/another" init -q
 check "init: a handle that's taken is refused, touching nothing" '! (cd "$P/another" && top init beta 2>/dev/null) && [ ! -e "$P/another/.ai" ] && [ ! -e "$P/another/.gitignore" ]'

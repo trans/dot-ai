@@ -1065,6 +1065,10 @@ cmd_hook() {
 
 # -- Setting up -----------------------------------------------------------------
 
+# Setting up says what it did, a line each: done, or left for the user
+did() { printf '✓ %s\n' "$*"; }
+heed() { printf '! %s\n' "$*"; }
+
 cmd_init() {
   handle=${1:-} dir=${2:-.}
   case $handle in -*) die "usage: dot-ai init [HANDLE] [DIR]" ;; esac
@@ -1101,9 +1105,9 @@ cmd_init() {
     [ ! -s "$ign" ] || [ -z "$(tail -c 1 "$ign")" ] || printf '\n' >>"$ign"
     printf '/.ai/\n' >>"$ign"
     if git -C "$top" add .gitignore && git -C "$top" commit -q -m "Ignore .ai/, the ai branch's worktree" -- .gitignore; then
-      printf 'added .ai/ to the checkout'\''s .gitignore, and committed that alone\n'
+      did "added .ai/ to the checkout's .gitignore, and committed that alone"
     else
-      printf 'added .ai/ to the checkout'\''s .gitignore: commit it\n'
+      heed "added .ai/ to the checkout's .gitignore, but couldn't commit it: commit it"
     fi
   fi
 
@@ -1115,7 +1119,7 @@ cmd_init() {
         git -C "$top" worktree add -q --track -b ai .ai origin/ai
       fi || die "couldn't check the ai branch out at $top/.ai"
       h=$(handle_of "$top") || h='(unreadable: see .ai/config.yml)'
-      printf 'checked out the ai branch at %s/.ai: this project is @%s\n' "$top" "$h"
+      did "checked out the ai branch at $top/.ai: this project is @$h"
       return 0
       ;;
   esac
@@ -1126,21 +1130,27 @@ cmd_init() {
     { git -C "$top" worktree add -q --detach .ai &&
       git -C "$ai" checkout -q --orphan ai && git -C "$ai" rm -rfq .; } ||
     die "couldn't make the ai branch's worktree at $ai"
+  did "made the ai branch, checked out at $ai"
   sed "s/PROJECT/$handle/g" "$assets/config.yml" >"$ai/config.yml" &&
-    cp "$assets/gitignore" "$ai/.gitignore" &&
-    mkdir -p "$ai/memory" && cp "$assets/memory-README.md" "$ai/memory/README.md" ||
-    die "couldn't write .ai/'s first files"
+    cp "$assets/gitignore" "$ai/.gitignore" ||
+    die "couldn't write .ai/config.yml"
+  did "wrote .ai/config.yml: this project is @$handle"
+  mkdir -p "$ai/memory" && cp "$assets/memory-README.md" "$ai/memory/README.md" ||
+    die "couldn't write .ai/memory/README.md"
   for d in drafts outbox sent inbox received; do
-    mkdir -p "$ai/mail/$d" && : >"$ai/mail/$d/.gitkeep"
+    mkdir -p "$ai/mail/$d" && : >"$ai/mail/$d/.gitkeep" || die "couldn't make .ai/mail/$d/"
   done
+  did "made .ai/memory/, with its README, and .ai/mail/'s folders"
+  made=
   for d in Intake Outtake; do
-    [ -e "$top/$d" ] || { mkdir -p "$top/$d" && printf '*\n' >"$top/$d/.gitignore"; }
+    [ -e "$top/$d" ] || { mkdir -p "$top/$d" && printf '*\n' >"$top/$d/.gitignore" && made="$made${made:+ and }$d/"; }
   done
+  [ -z "$made" ] || did "made $made, for files passed between you and agents (git leaves them out)"
   if git -C "$ai" add .gitignore config.yml memory/README.md mail &&
     git -C "$ai" commit -q -m "Set up .ai/ for @$handle"; then
-    printf 'made .ai/ for @%s at %s/.ai, on its own ai branch, committed\n' "$handle" "$top"
+    did "committed .ai/ on the ai branch"
   else
-    printf 'made .ai/ for @%s at %s/.ai, on its own ai branch: commit it there\n' "$handle" "$top"
+    heed "couldn't commit .ai/: commit it there"
   fi
   # Mail finds projects under ai.path
   roots=$(git config --get-all --type=path ai.path 2>/dev/null)
@@ -1151,7 +1161,7 @@ cmd_init() {
       case $top/ in "$r"/*) under=1 ;; esac
     done
     [ -n "$under" ] ||
-      printf 'it'\''s outside ai.path, so mail won'\''t find it: git config --global --add ai.path DIR, for a DIR above it\n'
+      heed "it's outside ai.path, so mail won't find it: git config --global --add ai.path DIR, for a DIR above it"
   fi
   printf 'next: say what this project'\''s agent does (description, in .ai/config.yml), put what'\''s known in .ai/memory/, and push the branch if it should be on the remote: git -C .ai push -u origin ai\n'
 }
@@ -1189,10 +1199,10 @@ done
 exec sh "${best:-$here}" "$@"
 EOF
   } >"$target.tmp" && chmod +x "$target.tmp" && mv "$target.tmp" "$target" || die "couldn't write $target"
-  printf 'installed %s: it runs the newest dot-ai installed (now %s)\n' "$target" "$("$target" version 2>/dev/null)"
+  did "installed $target: it runs the newest dot-ai installed (now $("$target" version 2>/dev/null))"
   case :$PATH: in
     *:"$bindir":*) ;;
-    *) printf '%s isn'\''t on PATH: add it to run dot-ai by name\n' "$bindir" ;;
+    *) heed "$bindir isn't on PATH: add it to run dot-ai by name" ;;
   esac
 }
 
