@@ -9,7 +9,9 @@ mail`, and adds `send`, `draft`, `done` and `rm`, so agents never name or
 move mail files themselves (the user: one interface whatever the
 carrier), and `init` and `install`; `dot-ai-mail` stays as a shim for
 `dot-ai mail`. 0.5.1 names each hook (`statusMessage`), which Codex's
-`/hooks` lists them by ("Unnamed hook" without one). Tested by
+`/hooks` lists them by ("Unnamed hook" without one). 0.5.2 keeps a
+`.` between digits in a file name's topic (`landing-v0.8.2`), as the
+spec always allowed (@overlore's note, 2026-10-31). Tested by
 `tests/dot-ai.sh` (`just test`); its hooks ship in the dot-ai plugin
 (`hooks/hooks.json`).*
 
@@ -39,7 +41,7 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 
 | Command | Does |
 |---|---|
-| `dot-ai mail send ADDRESS TOPIC [--re ID] [DIR]` | Writes the message on standard input to the outbox, named from the time, the address and TOPIC folded to lowercase words joined by `-`, with `Re:` from `--re`; then delivers the outbox. Refuses a bad address, a `--re` that names nothing, or an empty message, writing nothing. |
+| `dot-ai mail send ADDRESS TOPIC [--re ID] [DIR]` | Writes the message on standard input to the outbox, named from the time, the address and TOPIC folded to lowercase words joined by `-` (a `.` kept between digits), with `Re:` from `--re`; then delivers the outbox. Refuses a bad address, a `--re` that names nothing, or an empty message, writing nothing. |
 | `dot-ai mail draft ADDRESS TOPIC [--re ID] [--why WHY] [--by WHO] [DIR]` | The same, kept in `drafts/`: `--why` is its `Held:` line, `--by` its `By:` line. The draft is an ordinary file there, which the agent may edit before it goes. (The user preferred "draft, then send" to `send --hold` and `release`, 2026-10-30.) |
 | `dot-ai mail send NAME` | Sends a draft (its name, or path): moves it to the outbox without its `Held:` line (a `By:` line stays: it's the record) and delivers. |
 | `dot-ai mail done NAME...` | Files inbox messages under `received/`. NAME is the file's name, its path, or the message's id. A topic's notice is removed instead; one filed already is removed. |

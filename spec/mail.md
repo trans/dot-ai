@@ -150,10 +150,12 @@ The parts:
   across daylight-saving changes. Header lines give times in full.
 - The address starts right after the time, with `@` or `#`, and runs to
   the first `--` (`20261014-021714Z-#arcana.releases--post-3-a1b2c3d4.md`).
-- `<topic>` is a few lowercase words joined by `-`, digits and `.` allowed
-  (`v0.12.0`). A carrier's subject becomes a topic by lowercasing it,
-  turning each run of characters other than `a-z`, `0-9`, `.` and `-` into
-  `-`, trimming `-` from both ends, and cutting it to 50 characters.
+- `<topic>` is a few lowercase words joined by `-`, with a `.` kept
+  between digits (`landing-v0.8.2`). Words given as a topic, or a
+  carrier's subject, become one by lowercasing them, turning each run of
+  characters other than `a-z` and `0-9` into one `-` (except a `.` between
+  two digits), trimming `-` from both ends, and cutting it to 50
+  characters, then trimming `-` and `.` from its end.
 - `<id>` is the message's id (Ids, below).
 
 ## Outbound files

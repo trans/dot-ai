@@ -209,6 +209,8 @@ check "send: filed with the message as given" '[ "$(tail -n 2 "$A/sent/$n")" = "
 out=$(cd "$P/alpha" && printf 'Thanks.' | dotai send beta thanks --re 1a2b3c4d)
 n=$(ls "$A/sent" | grep -- "-@beta--thanks.md$")
 check "send: --re heads it, a newline ends it" '[ "$(sed -n 1p "$A/sent/$n")" = "Re: 1a2b3c4d" ] && [ "$(tail -n 1 "$A/sent/$n")" = "Thanks." ] && f=$(ls "$B/inbox/"*--thanks-*.md) && grep -qx "Re: 1a2b3c4d" "$f"'
+out=$(cd "$P/alpha" && printf 'Ready.\n' | dotai send @beta "Deploy landing-v0.8.2… (e.g. 1.2.3.4_x)")
+check "send: a . kept between digits, and only there" 'printf "%s\n" "$out" | grep -q -- "-@beta--deploy-landing-v0.8.2-e-g-1.2.3.4-x.md to @beta$"'
 check "send: a post" '(cd "$P/alpha" && printf "Fifth.\n" | dotai send "#news" "the fifth") | grep -q "^posted: .*-#news--the-fifth.md to #news as post 5$"'
 before=$(count "$A/outbox")
 check "send: refuses a bad address, a bad --re, an empty message" '! (cd "$P/alpha" && printf "x\n" | dotai send "Beta Team" x 2>/dev/null) && ! (cd "$P/alpha" && printf "x\n" | dotai send @beta x --re "the schema" 2>/dev/null) && ! (cd "$P/alpha" && printf "  \n" | dotai send @beta x 2>/dev/null) && [ "$(count "$A/outbox")" = "$before" ]'
