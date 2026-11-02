@@ -11,7 +11,9 @@ carrier), and `init` and `install`; `dot-ai-mail` stays as a shim for
 `dot-ai mail`. 0.5.1 names each hook (`statusMessage`), which Codex's
 `/hooks` lists them by ("Unnamed hook" without one). 0.5.2 keeps a
 `.` between digits in a file name's topic (`landing-v0.8.2`), as the
-spec always allowed (@overlore's note, 2026-10-31). Tested by
+spec always allowed (@overlore's note, 2026-10-31). 0.6.0 (2026-11-02)
+adds `dot-ai channel`, which tells an idle Claude Code session that mail
+has arrived (below, The mail channel). Tested by
 `tests/dot-ai.sh` (`just test`); its hooks ship in the dot-ai plugin
 (`hooks/hooks.json`).*
 
@@ -54,6 +56,7 @@ server and nothing beyond the file system, and it doesn't need Arcana.
 | `dot-ai init [HANDLE] [DIR]` | Sets up `.ai/` in the git checkout at or above `DIR`: adds `.ai/` to its `.gitignore`, as `/.ai/` (committing only that), makes the `ai` branch's worktree from the skill's assets with the handle (by default the checkout's name, folded), the mail folders, `Intake/` and `Outtake/`, and commits. Refuses a handle another project under `ai.path` has. On a clone whose branch (or `origin/ai`) exists, checks it out instead. So the agent setting it up isn't left mid-way under no address, or the wrong one (the user, 2026-10-30). |
 | `dot-ai install [BINDIR]` | Writes `BINDIR/dot-ai` (by default `~/.local/bin`), a wrapper that runs the newest copy in Claude Code's or Codex's plugin cache, else the copy that wrote it. Replaces only a file it wrote. |
 | `dot-ai hook EVENT [--agent claude\|codex]` | What the session hooks run (below): `session-start`, `stop`, `prompt`, `session-end`. The plugin's hooks name no agent: `PLUGIN_ROOT` set means Codex (Claude Code sets only `CLAUDE_*`), else `CLAUDE_PROJECT_DIR` set means Claude Code, else Codex. |
+| `dot-ai channel` | An MCP server for Claude Code's channels, which the plugin runs in each session (below, The mail channel). |
 | `dot-ai hooks` | Prints the hook entries to add to Claude Code's and Codex's settings, for use without the plugin. It doesn't edit them: JSON is the one thing `sh` can't safely rewrite. |
 
 ## Hooks
@@ -84,6 +87,39 @@ server and nothing beyond the file system, and it doesn't need Arcana.
   output and exit 0 (2 only to keep the agent going). It reads
   `session_id` and `cwd` from the hook's JSON with `sed` (flat fields; no
   `jq`), and the project from `CLAUDE_PROJECT_DIR`, else `cwd`.
+
+## The mail channel
+
+An agent hears of mail at its hooks: session start, a prompt, Stop. A busy
+session hears at its next Stop, but an idle one only once the user types.
+`dot-ai channel` closes that gap in Claude Code (Codex has no channels):
+an MCP server, run by the plugin in every session, that declares Claude
+Code's `claude/channel` capability and, when mail the session hasn't been
+told of is in the inbox and the session is idle, sends
+`notifications/claude/channel` with "You have mail in .ai/mail/inbox/."
+and nothing more (the user, 2026-11-02: the skill says what to do, and
+the path keeps an agent with an email connector off email). Waking an
+idle agent is fine: most mail the user approved at the sending end.
+
+- **Idle:** Claude Code keeps a file for each session
+  (`~/.claude/sessions/<pid>.json`, found by `CLAUDE_CODE_SESSION_ID`)
+  whose `status` is `busy`, `idle` or `waiting`. Neither is documented;
+  if either changes, the channel just stops pushing and the hooks still
+  tell, as before.
+- **Told once:** it adds what it pushes to the file where the hooks keep
+  what each session has been told of, and skips what's there, so neither
+  repeats the other; what was waiting when it started is the
+  session-start hook's to tell.
+- **Only where it's heard:** it watches only where the session's command
+  line names `plugin:dot-ai@`; elsewhere Claude Code would drop the
+  notice while the hooks took it as told.
+- **Loading:** a plugin's channel needs `--channels plugin:dot-ai@dot-ai`
+  and a place on the allowlist, which managed settings can set
+  (`channelsEnabled`, `allowedChannelPlugins`); until then
+  `--dangerously-load-development-channels plugin:dot-ai@dot-ai`, with a
+  warning at each start.
+- **In sh:** an MCP server for this needs only each request's `method`
+  and top-level `id` (`json_top`, an awk scanner) and a few fixed replies.
 
 ## Delivering
 

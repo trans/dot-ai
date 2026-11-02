@@ -12,7 +12,7 @@
 
 LC_ALL=C
 export LC_ALL
-VERSION=0.5.2
+VERSION=0.6.0
 MAX_DEPTH=4 # how far below a search root a project may sit
 TAB=$(printf '\t')
 
@@ -53,6 +53,9 @@ dot-ai: a project's .ai/ (its notes, its mail, the machine's topics)
                                stdin)
   dot-ai hooks                 print the hook entries for Claude Code and Codex,
                                for use without the dot-ai plugin
+  dot-ai channel               an MCP server for Claude Code's channels, which
+                               tells an idle session when mail arrives (the
+                               plugin runs it)
   dot-ai version
 
 The project is the one at or above DIR (by default, here). NAME is a
@@ -69,7 +72,9 @@ die() {
 
 TMP=
 LOCK=
+WATCHER=
 cleanup() {
+  [ -n "$WATCHER" ] && kill "$WATCHER" 2>/dev/null
   [ -n "$LOCK" ] && rmdir "$LOCK" 2>/dev/null
   [ -n "$TMP" ] && rm -rf "$TMP"
 }
@@ -918,6 +923,11 @@ count() {
   if [ "$1" -eq 1 ]; then printf '1 %s' "$2"; else printf '%s %ss' "$1" "$2"; fi
 }
 
+# Where the hooks keep, for each session, what it has been told of
+run_dir() { printf '%s/dot-ai\n' "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"; }
+# A session's id as that file's name
+session_key() { printf '%s' "$1" | tr -c 'A-Za-z0-9_.-' '_'; }
+
 cmd_hook() {
   event=${1:-}
   shift
@@ -944,7 +954,7 @@ cmd_hook() {
     fi
   fi
   if [ -t 0 ]; then PAYLOAD=; else PAYLOAD=$(cat); fi
-  session=$(json_field session_id | tr -c 'A-Za-z0-9_.-' '_')
+  session=$(session_key "$(json_field session_id)")
   cwd=$(json_field cwd)
   quiet() {
     [ "$agent" = codex ] && case $event in stop | prompt) printf '{}\n' ;; esac
@@ -981,8 +991,9 @@ cmd_hook() {
   deliver "$root" >"$TMP/out"
   [ "$event" = session-end ] && exit 0
 
-  # What this session has been told of, so nothing is announced twice
-  rundir=${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/dot-ai
+  # What this session has been told of, so nothing is announced twice (the
+  # mail channel adds to it too)
+  rundir=$(run_dir)
   mkdir -p "$rundir" 2>/dev/null && chmod 700 "$rundir" 2>/dev/null
   told=$rundir/${session:-no-session}
   touch "$told" 2>/dev/null || told=$TMP/told
@@ -1063,6 +1074,129 @@ cmd_hook() {
   fi
   cat "$TMP/say" >&2 # Claude: exit 2 shows this to the agent and keeps it going
   exit 2
+}
+
+# -- The mail channel ---------------------------------------------------------------
+
+# An MCP server for Claude Code's channels (research preview): it tells an
+# idle session when mail arrives, so the agent needn't wait for the user's
+# next prompt. A busy session hears of it at Stop, from the hooks, and a
+# waiting one is left alone. The plugin runs it in every Claude Code
+# session; it watches only where the session was started with this
+# plugin's channel (--channels plugin:dot-ai@dot-ai), since elsewhere its
+# notice would be dropped while the hooks took it as told.
+
+NOTICE='You have mail in .ai/mail/inbox/.'
+
+# The raw JSON value of KEY at the top of the one-line object on stdin: a
+# string with its quotes, or a number; nothing for an object, an array or
+# a missing key
+json_top() {
+  awk -v k="$1" '
+    function top(s, k,    n, i, j, c, d, inkey, key, want) {
+      n = length(s)
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (c == "\"") {
+          for (j = i + 1; j <= n; j++) {
+            c = substr(s, j, 1)
+            if (c == "\\") j++
+            else if (c == "\"") break
+          }
+          if (want) return substr(s, i, j - i + 1)
+          if (d == 1 && inkey) { key = substr(s, i + 1, j - i - 1); inkey = 0 }
+          i = j
+        } else if (want && c !~ /[ \t\r]/) {
+          if (c == "{" || c == "[") return ""
+          for (j = i; j <= n; j++) if (substr(s, j, 1) ~ /[,} \t\r]/) break
+          return substr(s, i, j - i)
+        } else if (c == "{" || c == "[") {
+          if (++d == 1) inkey = 1
+        } else if (c == "}" || c == "]") d--
+        else if (c == "," && d == 1) inkey = 1
+        else if (c == ":" && d == 1 && key == k) want = 1
+      }
+      return ""
+    }
+    { v = top($0, k); if (v != "") print v }'
+}
+
+# A flat field of a JSON file, without its quotes
+file_field() {
+  tr '\n' ' ' <"$1" |
+    sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*"\{0,1\}\([^",}]*\).*/\1/p' | head -n 1
+}
+
+# Pushes the notice into the session when mail it hasn't been told of is in
+# the inbox of the project at ROOT and the session is idle. Claude Code
+# keeps a file for each session, with its status (busy, idle, waiting).
+channel_watch() {
+  main=$$
+  told=$(run_dir)/$(session_key "$CLAUDE_CODE_SESSION_ID")
+  sessions=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/sessions
+  inbox_list "$1" >"$TMP/known" # what's waiting now, the session-start hook tells of
+  sfile=
+  while sleep 2; do
+    kill -0 "$main" 2>/dev/null || exit 0
+    if [ -z "$sfile" ] || [ ! -f "$sfile" ]; then
+      sfile=$(grep -l "\"sessionId\"[[:space:]]*:[[:space:]]*\"$CLAUDE_CODE_SESSION_ID\"" "$sessions"/*.json 2>/dev/null | head -n 1)
+      [ -n "$sfile" ] || continue
+      case $(ps -o args= -p "$(file_field "$sfile" pid)" 2>/dev/null) in
+        *plugin:dot-ai@*) ;;
+        *) exit 0 ;;
+      esac
+    fi
+    [ "$(file_field "$sfile" status)" = idle ] || continue
+    [ -f "$told" ] || continue # the hooks haven't run yet
+    new=
+    inbox_list "$1" >"$TMP/now"
+    while IFS= read -r name; do
+      grep -qxF "$name" "$TMP/known" && continue
+      printf '%s\n' "$name" >>"$TMP/known"
+      grep -qxF "in:$name" "$told" && continue
+      printf 'in:%s\n' "$name" >>"$told"
+      new=1
+    done <"$TMP/now"
+    [ -n "$new" ] &&
+      printf '{"jsonrpc":"2.0","method":"notifications/claude/channel","params":{"content":"%s"}}\n' "$NOTICE"
+  done
+}
+
+cmd_channel() {
+  tmpdir
+  root=
+  if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && r=$(project_root "${CLAUDE_PROJECT_DIR:-.}") &&
+    [ -d "$r/.ai/mail/inbox" ] && [ "$(carrier)" = local ]; then
+    root=$r
+  fi
+  while IFS= read -r line; do
+    method=$(printf '%s\n' "$line" | json_top method)
+    method=${method#\"}
+    method=${method%\"}
+    id=$(printf '%s\n' "$line" | json_top id)
+    if [ "$method" = notifications/initialized ] && [ -n "$root" ] && [ -z "$WATCHER" ]; then
+      channel_watch "$root" &
+      WATCHER=$!
+    fi
+    [ -n "$method" ] && [ -n "$id" ] || continue # a notification, or a response
+    case $method in
+      initialize)
+        v=$(printf '%s\n' "$line" | sed -n 's/.*"protocolVersion"[[:space:]]*:[[:space:]]*"\([0-9-]*\)".*/\1/p')
+        result=$(printf '{"protocolVersion":"%s","capabilities":{"experimental":{"claude/channel":{}}},"serverInfo":{"name":"dot-ai","version":"%s"}}' \
+          "${v:-2025-06-18}" "$VERSION")
+        ;;
+      ping) result='{}' ;;
+      tools/list) result='{"tools":[]}' ;;
+      resources/list) result='{"resources":[]}' ;;
+      resources/templates/list) result='{"resourceTemplates":[]}' ;;
+      prompts/list) result='{"prompts":[]}' ;;
+      *)
+        printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32601,"message":"no such method"}}\n' "$id"
+        continue
+        ;;
+    esac
+    printf '{"jsonrpc":"2.0","id":%s,"result":%s}\n' "$id" "$result"
+  done
 }
 
 # -- Setting up -----------------------------------------------------------------
@@ -1260,6 +1394,7 @@ case ${1:-} in
   install) shift && cmd_install "$@" ;;
   hook) shift && cmd_hook "$@" ;;
   hooks) cmd_hooks ;;
+  channel) cmd_channel ;;
   version | --version) printf 'dot-ai %s\n' "$VERSION" ;;
   help | -h | --help | '') usage ;;
   *)

@@ -41,6 +41,19 @@ codex plugin marketplace add trans/dot-ai
 codex plugin add dot-ai@dot-ai
 ```
 
+In Claude Code, the plugin can also tell an idle session when mail
+arrives, so its agent needn't wait for your next prompt: a session started
+with the plugin's channel gets "You have mail in .ai/mail/inbox/." Channels
+are a research preview, and for now this one loads only as a development
+channel, which Claude Code warns about at each start:
+
+```sh
+claude --dangerously-load-development-channels plugin:dot-ai@dot-ai
+```
+
+A busy session hears of new mail when its turn ends, from the hooks, as
+before, and one waiting on you is left alone.
+
 Updates come through each tool's plugin manager (`claude plugin update
 dot-ai@dot-ai`, `codex plugin marketplace upgrade dot-ai`). Claude Code
 updates the plugin only when its version goes up, so a change meant to

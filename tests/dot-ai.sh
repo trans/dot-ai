@@ -309,6 +309,63 @@ check "install: again, over its own" 'top install "$T/bin2" >/dev/null'
 mkdir -p "$T/bin3" && printf '#!/bin/sh\n' >"$T/bin3/dot-ai"
 check "install: leaves a dot-ai it didn't write" '! top install "$T/bin3" 2>/dev/null && [ "$(cat "$T/bin3/dot-ai")" = "#!/bin/sh" ]'
 
+# The mail channel: an MCP server for Claude Code's channels (dot-ai's own)
+V=$($SH "$M" version | cut -d ' ' -f 2)
+out=$(printf '%s\n' \
+  '{"jsonrpc":"2.0","id":"p-1","method":"server/discover","params":{"_meta":{"id":"nested","method":"x"}}}' \
+  '{"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"t \"q\" {x}","id":9}},"jsonrpc":"2.0","id":0}' \
+  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+  '{ "jsonrpc" : "2.0" , "id" : 2 , "method" : "ping" }' \
+  '{"jsonrpc":"2.0","id":3,"result":{}}' | $SH "$M" channel)
+init='{"jsonrpc":"2.0","id":0,"result":{"protocolVersion":"2025-11-25","capabilities":{"experimental":{"claude/channel":{}}},"serverInfo":{"name":"dot-ai","version":"'$V'"}}}'
+check "channel: initialize, with the channel's capability" 'printf "%s\n" "$out" | grep -qxF "$init"'
+check "channel: the top-level id, not a nested one" 'printf "%s\n" "$out" | grep -qxF "{\"jsonrpc\":\"2.0\",\"id\":\"p-1\",\"error\":{\"code\":-32601,\"message\":\"no such method\"}}"'
+check "channel: ping; no answer to a notification or a response" 'printf "%s\n" "$out" | grep -qxF "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}" && [ "$(printf "%s\n" "$out" | wc -l | tr -d " ")" = 3 ]'
+
+if [ "$CARRIER" = local ]; then
+  # A session of Claude Code's, started with this plugin's channel: its
+  # process, and the file Claude Code keeps for it
+  mkdir -p "$T/claude/sessions"
+  sh -c 'sleep 120; :' claude --dangerously-load-development-channels plugin:dot-ai@dot-ai &
+  cpid=$!
+  status() { printf '{"pid":%s,"sessionId":"s-chan","status":"%s"}\n' "$cpid" "$1" >"$T/claude/sessions/$cpid.json"; }
+  status idle
+  hook session-start s-chan "$P/alpha" claude >/dev/null 2>&1
+  mkfifo "$T/chan.in"
+  CLAUDE_CODE_SESSION_ID=s-chan CLAUDE_CONFIG_DIR=$T/claude CLAUDE_PROJECT_DIR=$P/alpha \
+    $SH "$M" channel <"$T/chan.in" >"$T/chan.out" &
+  chan=$!
+  exec 3>"$T/chan.in"
+  printf '%s\n' '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{}}' '{"jsonrpc":"2.0","method":"notifications/initialized"}' >&3
+  pushes() { grep -c '"method":"notifications/claude/channel"' "$T/chan.out"; }
+  within() { i=0; while [ $i -lt 8 ]; do eval "$1" && return 0; sleep 1; i=$((i + 1)); done; return 1; }
+  sleep 3
+  check "channel: nothing for mail the session-start hook told of" '[ "$(pushes)" = 0 ]'
+  (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "channel one") >/dev/null
+  n1=$(ls "$A/inbox" | grep -- "--channel-one-")
+  check "channel: mail arriving while idle, pushed once" 'within "[ \"\$(pushes)\" = 1 ]" && sleep 3 && [ "$(pushes)" = 1 ] && grep -qxF "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/claude/channel\",\"params\":{\"content\":\"You have mail in .ai/mail/inbox/.\"}}" "$T/chan.out"'
+  check "channel: told, so the Stop hook doesn't tell it again" 'grep -qxF "in:$n1" "$T/run/dot-ai/s-chan" && ! hook stop s-chan "$P/alpha" claude 2>&1 | grep -q -- "--channel-one-"'
+  status busy
+  (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "channel two") >/dev/null
+  sleep 3
+  check "channel: nothing while busy" '[ "$(pushes)" = 1 ]'
+  status idle
+  check "channel: pushed once idle, if no hook told of it" 'within "[ \"\$(pushes)\" = 2 ]"'
+  exec 3>&-
+  check "channel: ends with its input" 'within "! kill -0 $chan 2>/dev/null"'
+  # Started without this plugin's channel: it doesn't watch
+  sh -c 'sleep 120; :' claude &
+  cpid2=$!
+  printf '{"pid":%s,"sessionId":"s-plain","status":"idle"}\n' "$cpid2" >"$T/claude/sessions/$cpid2.json"
+  hook session-start s-plain "$P/alpha" claude >/dev/null 2>&1
+  out=$( (printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+    sleep 3
+    (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "channel three") >/dev/null
+    sleep 4) | CLAUDE_CODE_SESSION_ID=s-plain CLAUDE_CONFIG_DIR=$T/claude CLAUDE_PROJECT_DIR=$P/alpha $SH "$M" channel)
+  check "channel: not where the session wasn't started with it" '[ -z "$out" ]'
+  kill "$cpid" "$cpid2" 2>/dev/null
+fi
+
 # Another carrier: Arcana stays out of mail under dot-ai's; dot-ai hands
 # the carrier's work to Arcana's, and refuses one it doesn't know
 git config --file "$T/gitconfig" ai.carrier $OTHER
