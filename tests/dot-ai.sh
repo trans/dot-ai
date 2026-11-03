@@ -35,6 +35,13 @@ else
   carry_hook() { $SH "$M" hook "$@"; }
   VIA=local OTHER=arcana
 fi
+# A stand-in for Codex's codex, so no test reaches a real Codex: it notes
+# how it was called
+mkdir -p "$T/fake"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>"%s/codex.calls"\n' "$T" >"$T/fake/codex"
+chmod +x "$T/fake/codex"
+PATH=$T/fake:$PATH
+export PATH
 
 failed=0
 ok() { printf 'ok   %s\n' "$1"; }
@@ -323,50 +330,91 @@ check "channel: the top-level id, not a nested one" 'printf "%s\n" "$out" | grep
 check "channel: ping; no answer to a notification or a response" 'printf "%s\n" "$out" | grep -qxF "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}" && [ "$(printf "%s\n" "$out" | wc -l | tr -d " ")" = 3 ]'
 
 if [ "$CARRIER" = local ]; then
-  # A session of Claude Code's, started with this plugin's channel: its
-  # process, and the file Claude Code keeps for it
-  mkdir -p "$T/claude/sessions"
-  sh -c 'sleep 120; :' claude --dangerously-load-development-channels plugin:dot-ai@dot-ai &
-  cpid=$!
-  status() { printf '{"pid":%s,"sessionId":"s-chan","status":"%s"}\n' "$cpid" "$1" >"$T/claude/sessions/$cpid.json"; }
-  status idle
+  R=$T/run/dot-ai
+  rm -f "$R"/*.session # the sessions of the tests above
+  send() { (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "$1") >/dev/null; }
+  pushes() { grep -c '"method":"notifications/claude/channel"' "$T/chan.out"; }
+  within() { i=0; while [ $i -lt 8 ]; do eval "$1" && return 0; sleep 1; i=$((i + 1)); done; return 1; }
+  state() { sed -n 's/^state=//p' "$R/$1.session" 2>/dev/null; }
+
+  # The hooks keep each session's record
   hook session-start s-chan "$P/alpha" claude >/dev/null 2>&1
+  check "record: a session's start makes it, idle" '[ "$(state s-chan)" = idle ] && grep -qx "root=$(cd "$P/alpha" && pwd -P)" "$R/s-chan.session" && grep -qx "agent=claude" "$R/s-chan.session" && grep -qx "id=s-chan" "$R/s-chan.session"'
+  hook prompt s-chan "$P/alpha" claude >/dev/null 2>&1
+  check "record: a prompt makes it busy" '[ "$(state s-chan)" = busy ]'
+  hook stop s-chan "$P/alpha" claude >/dev/null 2>&1
+  check "record: a Stop that lets the turn end makes it idle" '[ "$(state s-chan)" = idle ]'
+  printf '{"session_id":"s-cmp","cwd":"%s","source":"compact"}' "$P/alpha" | carry_hook session-start --agent claude >/dev/null 2>&1
+  check "record: a start from compacting, maybe mid-turn, is busy" '[ "$(state s-cmp)" = busy ]'
+  hook session-end s-cmp "$P/alpha" claude >/dev/null 2>&1
+  check "record: a session's end drops it" '[ ! -e "$R/s-cmp.session" ]'
+
+  # A session of Claude Code's started with this plugin's channel, which
+  # runs as its child, as Claude Code runs it
   mkfifo "$T/chan.in"
-  CLAUDE_CODE_SESSION_ID=s-chan CLAUDE_CONFIG_DIR=$T/claude CLAUDE_PROJECT_DIR=$P/alpha \
-    $SH "$M" channel <"$T/chan.in" >"$T/chan.out" &
+  CLAUDE_CODE_SESSION_ID=s-chan CLAUDE_PROJECT_DIR=$P/alpha \
+    sh -c "$SH \"$M\" channel; :" claude --dangerously-load-development-channels plugin:dot-ai@dot-ai <"$T/chan.in" >"$T/chan.out" &
   chan=$!
   exec 3>"$T/chan.in"
   printf '%s\n' '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{}}' '{"jsonrpc":"2.0","method":"notifications/initialized"}' >&3
-  pushes() { grep -c '"method":"notifications/claude/channel"' "$T/chan.out"; }
-  within() { i=0; while [ $i -lt 8 ]; do eval "$1" && return 0; sleep 1; i=$((i + 1)); done; return 1; }
-  sleep 3
-  check "channel: nothing for mail the session-start hook told of" '[ "$(pushes)" = 0 ]'
-  (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "channel one") >/dev/null
-  n1=$(ls "$A/inbox" | grep -- "--channel-one-")
-  check "channel: mail arriving while idle, pushed once" 'within "[ \"\$(pushes)\" = 1 ]" && sleep 3 && [ "$(pushes)" = 1 ] && grep -qxF "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/claude/channel\",\"params\":{\"content\":\"You have mail in .ai/mail/inbox/.\"}}" "$T/chan.out"'
-  check "channel: told, so the Stop hook doesn't tell it again" 'grep -qxF "in:$n1" "$T/run/dot-ai/s-chan" && ! hook stop s-chan "$P/alpha" claude 2>&1 | grep -q -- "--channel-one-"'
-  status busy
-  (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "channel two") >/dev/null
-  sleep 3
+  check "channel: waits on its pipe" 'within "[ -p \"$R/s-chan.pipe\" ] && [ -s \"$R/s-chan.chan\" ]"'
+  send "channel one"
+  check "channel: mail arriving while idle, pushed once" 'within "[ \"\$(pushes)\" = 1 ]" && sleep 2 && [ "$(pushes)" = 1 ] && grep -qxF "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/claude/channel\",\"params\":{\"content\":\"You have mail in .ai/mail/inbox/.\"}}" "$T/chan.out"'
+  check "channel: the push makes the session busy" '[ "$(state s-chan)" = busy ]'
+  check "channel: mail the agent left in the inbox, the Stop hook still tells" 'hook stop s-chan "$P/alpha" claude 2>&1 | grep -q -- "--channel-one-"'
+  hook stop s-chan "$P/alpha" claude >/dev/null 2>&1
+  hook prompt s-chan "$P/alpha" claude >/dev/null 2>&1
+  send "channel two"
+  sleep 2
   check "channel: nothing while busy" '[ "$(pushes)" = 1 ]'
-  status idle
-  check "channel: pushed once idle, if no hook told of it" 'within "[ \"\$(pushes)\" = 2 ]"'
-  status shell # idle, with a command the agent started still running
-  (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "channel four") >/dev/null
-  check "channel: pushed while a command runs in the background" 'within "[ \"\$(pushes)\" = 3 ]"'
+  hook stop s-chan "$P/alpha" claude >/dev/null 2>&1 # tells of it
+  hook stop s-chan "$P/alpha" claude >/dev/null 2>&1
+  send "channel three"
+  check "channel: pushed once idle again" 'within "[ \"\$(pushes)\" = 2 ]"'
+  hook stop s-chan "$P/alpha" claude >/dev/null 2>&1
+  hook stop s-chan "$P/alpha" claude >/dev/null 2>&1
+
+  # A Codex session: delivery queues the notice into it with codex queue
+  : >"$T/codex.calls"
+  hook session-start c-one "$P/alpha" codex >/dev/null 2>&1
+  send "codex one"
+  check "codex: the most recently active session is told, and only it" 'within "[ -s \"$T/codex.calls\" ]" && [ "$(cat "$T/codex.calls")" = "queue --thread c-one --message You have mail in .ai/mail/inbox/." ] && sleep 1 && [ "$(pushes)" = 2 ]'
+  check "codex: once told, it's busy" '[ "$(state c-one)" = busy ]'
+  send "codex two"
+  sleep 2
+  check "codex: none while the most recent is busy, not even another" '[ "$(wc -l <"$T/codex.calls" | tr -d " ")" = 1 ] && [ "$(pushes)" = 2 ]'
+  hook session-end c-one "$P/alpha" codex >/dev/null 2>&1
+  send "channel four"
+  check "channel: once that session ends, the next one" 'within "[ \"\$(pushes)\" = 3 ]"'
+
   exec 3>&-
-  check "channel: ends with its input" 'within "! kill -0 $chan 2>/dev/null"'
-  # Started without this plugin's channel: it doesn't watch
-  sh -c 'sleep 120; :' claude &
-  cpid2=$!
-  printf '{"pid":%s,"sessionId":"s-plain","status":"idle"}\n' "$cpid2" >"$T/claude/sessions/$cpid2.json"
+  check "channel: ends with its input, and clears up its pipe" 'within "! kill -0 $chan 2>/dev/null" && [ ! -e "$R/s-chan.pipe" ] && [ ! -e "$R/s-chan.chan" ]'
+
+  # A channel whose process is there but doesn't read its pipe: delivery
+  # doesn't wait on it
+  sleep 60 &
+  stuck=$!
+  mkfifo "$R/s-stuck.pipe" && printf '%s\n' "$stuck" >"$R/s-stuck.chan"
+  printf 'root=%s\nagent=claude\nid=s-stuck\nstate=idle\n' "$(cd "$P/alpha" && pwd -P)" >"$R/s-stuck.session"
+  send "channel five" &
+  sender=$!
+  check "channel: one that doesn't read holds no delivery up" 'within "! kill -0 $sender 2>/dev/null"'
+  kill "$stuck" 2>/dev/null
+  rm -f "$R/s-stuck.pipe" "$R/s-stuck.chan" "$R/s-stuck.session"
+  # One that ended without clearing up: a session's start does
+  sh -c ':' &
+  gone=$!
+  wait "$gone"
+  mkfifo "$R/s-gone.pipe" && printf '%s\n' "$gone" >"$R/s-gone.chan"
+  check "record: a session's start clears up an ended channel's pipe" 'hook session-start s-next "$P/alpha" claude >/dev/null 2>&1; [ ! -e "$R/s-gone.pipe" ] && [ ! -e "$R/s-gone.chan" ]'
+
+  # Started without this plugin's channel: it doesn't listen
   hook session-start s-plain "$P/alpha" claude >/dev/null 2>&1
   out=$( (printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-    sleep 3
-    (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "channel three") >/dev/null
-    sleep 4) | CLAUDE_CODE_SESSION_ID=s-plain CLAUDE_CONFIG_DIR=$T/claude CLAUDE_PROJECT_DIR=$P/alpha $SH "$M" channel)
-  check "channel: not where the session wasn't started with it" '[ -z "$out" ]'
-  kill "$cpid" "$cpid2" 2>/dev/null
+    sleep 2
+    send "channel six"
+    sleep 2) | CLAUDE_CODE_SESSION_ID=s-plain CLAUDE_PROJECT_DIR=$P/alpha sh -c "$SH \"$M\" channel; :" claude)
+  check "channel: not where the session wasn't started with it" '[ -z "$out" ] && [ ! -e "$R/s-plain.pipe" ]'
 fi
 
 # Another carrier: Arcana stays out of mail under dot-ai's; dot-ai hands

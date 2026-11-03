@@ -12,7 +12,7 @@
 
 LC_ALL=C
 export LC_ALL
-VERSION=0.6.1
+VERSION=0.7.0
 MAX_DEPTH=4 # how far below a search root a project may sit
 TAB=$(printf '\t')
 
@@ -53,9 +53,9 @@ dot-ai: a project's .ai/ (its notes, its mail, the machine's topics)
                                stdin)
   dot-ai hooks                 print the hook entries for Claude Code and Codex,
                                for use without the dot-ai plugin
-  dot-ai channel               an MCP server for Claude Code's channels, which
-                               tells an idle session when mail arrives (the
-                               plugin runs it)
+  dot-ai channel               an MCP server for Claude Code's channels, through
+                               which delivery tells an idle session its mail
+                               has come (the plugin runs it)
   dot-ai version
 
 The project is the one at or above DIR (by default, here). NAME is a
@@ -73,8 +73,13 @@ die() {
 TMP=
 LOCK=
 WATCHER=
+CHAN_PIPE=
+CHAN_PID=
 cleanup() {
   [ -n "$WATCHER" ] && kill "$WATCHER" 2>/dev/null
+  if [ -n "$CHAN_PID" ] && [ "$(cat "$CHAN_PID" 2>/dev/null)" = "$$" ]; then
+    rm -f "$CHAN_PIPE" "$CHAN_PID"
+  fi
   [ -n "$LOCK" ] && rmdir "$LOCK" 2>/dev/null
   [ -n "$TMP" ] && rm -rf "$TMP"
 }
@@ -514,6 +519,7 @@ deliver() {
             printf 'left in the outbox: %s: couldn'\''t write to %s/ (from a sandbox, leave it: the session hooks deliver it when the turn ends)\n' "$name" "$dest"
             continue
           fi
+          printf '%s\n' "$dir" >>"$TMP/arrived"
         fi
         ;;
     esac
@@ -549,6 +555,10 @@ deliver() {
 
   rmdir "$LOCK" 2>/dev/null
   LOCK=
+  if [ -s "$TMP/arrived" ]; then
+    sort -u "$TMP/arrived" | while IFS= read -r d; do tell_session "$d"; done
+  fi
+  rm -f "$TMP/arrived"
 }
 
 # The receipts for the mail the project at ROOT sent: each message delivered
@@ -923,10 +933,67 @@ count() {
   if [ "$1" -eq 1 ]; then printf '1 %s' "$2"; else printf '%s %ss' "$1" "$2"; fi
 }
 
-# Where the hooks keep, for each session, what it has been told of
+# Where the hooks keep, for each session, what it has been told of (a
+# file named by its key) and its record (KEY.session), and where a Claude
+# Code session's mail channel keeps its pipe (KEY.pipe) and process id
+# (KEY.chan)
 run_dir() { printf '%s/dot-ai\n' "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"; }
-# A session's id as that file's name
+# A session's id as those files' name
 session_key() { printf '%s' "$1" | tr -c 'A-Za-z0-9_.-' '_'; }
+
+# A session's record, kept by the hooks so delivery can tell an idle
+# session its mail has come: its project's root, its agent (claude or
+# codex), its id, and its state, busy (from a prompt to a Stop that lets
+# it end its turn) or idle
+rec_get() { sed -n "s/^$2=//p" "$1" 2>/dev/null | head -n 1; }
+rec_write() { # FILE ROOT AGENT ID STATE
+  printf 'root=%s\nagent=%s\nid=%s\nstate=%s\n' "$2" "$3" "$4" "$5" >"$1.$$" && mv "$1.$$" "$1"
+}
+rec_state() { # FILE STATE, for a record that exists
+  [ -f "$1" ] || return 0
+  sed "s/^state=.*/state=$2/" "$1" >"$1.$$" && mv "$1.$$" "$1"
+}
+
+# What a session is told when mail comes while it's idle
+NOTICE='You have mail in .ai/mail/inbox/.'
+
+# Tells the project at DIR, whose inbox mail has just reached, if its most
+# recently active session that can be told is idle: a Claude Code session
+# started with this plugin's channel, through the channel's pipe (the
+# channel pushes the notice), or a Codex session, by queueing the notice
+# with `codex queue`, which starts its turn. Only one, so two sessions
+# don't both answer the mail; a busy one hears of it at Stop, from the
+# hooks. A Codex session counts as busy once told, until its Stop.
+tell_session() {
+  tdir=$(cd "$1" 2>/dev/null && pwd -P) || return 0
+  trun=$(run_dir)
+  ls -t "$trun" 2>/dev/null | grep '\.session$' | while IFS= read -r tf; do
+    trec=$trun/$tf tkey=${tf%.session}
+    [ "$(rec_get "$trec" root)" = "$tdir" ] || continue
+    case $(rec_get "$trec" agent) in
+      claude)
+        tpid=$(cat "$trun/$tkey.chan" 2>/dev/null) || continue
+        kill -0 "$tpid" 2>/dev/null && [ -p "$trun/$tkey.pipe" ] || continue
+        [ "$(rec_get "$trec" state)" = idle ] || break
+        # In the background, and given up after a few seconds, so a
+        # channel that stopped reading can't hold delivery up
+        (printf 'mail\n' >"$trun/$tkey.pipe") >/dev/null 2>&1 </dev/null &
+        tw=$!
+        (sleep 5 && kill "$tw") >/dev/null 2>&1 </dev/null &
+        ;;
+      codex)
+        command -v codex >/dev/null 2>&1 || continue
+        tid=$(rec_get "$trec" id)
+        [ -n "$tid" ] || continue
+        [ "$(rec_get "$trec" state)" = idle ] || break
+        rec_state "$trec" busy
+        (codex queue --thread "$tid" --message "$NOTICE") >/dev/null 2>&1 </dev/null &
+        ;;
+      *) continue ;;
+    esac
+    break
+  done
+}
 
 cmd_hook() {
   event=${1:-}
@@ -954,9 +1021,13 @@ cmd_hook() {
     fi
   fi
   if [ -t 0 ]; then PAYLOAD=; else PAYLOAD=$(cat); fi
-  session=$(session_key "$(json_field session_id)")
+  sid=$(json_field session_id)
+  session=$(session_key "$sid")
   cwd=$(json_field cwd)
+  rec=
+  # A Stop with nothing to say lets the turn end: the session is idle
   quiet() {
+    [ "$event" = stop ] && [ -n "$rec" ] && rec_write "$rec" "$root" "$agent" "$sid" idle
     [ "$agent" = codex ] && case $event in stop | prompt) printf '{}\n' ;; esac
     exit 0
   }
@@ -981,6 +1052,25 @@ cmd_hook() {
   [ "$(carrier)" = local ] || quiet
   tmpdir
   : >"$TMP/say"
+
+  # The session's record: busy from a prompt, idle from a session's start
+  # (busy if it started from compacting, which may be mid-turn) and from a
+  # Stop that lets the turn end (quiet, above); dropped at its end
+  rundir=$(run_dir)
+  mkdir -p "$rundir" 2>/dev/null && chmod 700 "$rundir" 2>/dev/null
+  if [ -n "$session" ] && [ -d "$rundir" ]; then
+    rec=$rundir/$session.session
+    case $event in
+      prompt) rec_write "$rec" "$root" "$agent" "$sid" busy ;;
+      session-start)
+        st=idle
+        [ "$(json_field source)" = compact ] && st=busy
+        rec_write "$rec" "$root" "$agent" "$sid" "$st"
+        ;;
+      session-end) rm -f "$rec" && rec= ;;
+    esac
+  fi
+
   # At each prompt, only the receipts: they never keep the agent going on
   # their own, so they wait for the next turn
   if [ "$event" = prompt ]; then
@@ -991,13 +1081,18 @@ cmd_hook() {
   deliver "$root" >"$TMP/out"
   [ "$event" = session-end ] && exit 0
 
-  # What this session has been told of, so nothing is announced twice (the
-  # mail channel adds to it too)
-  rundir=$(run_dir)
-  mkdir -p "$rundir" 2>/dev/null && chmod 700 "$rundir" 2>/dev/null
+  # What this session has been told of, so nothing is announced twice
   told=$rundir/${session:-no-session}
   touch "$told" 2>/dev/null || told=$TMP/told
-  [ "$event" = session-start ] && find "$rundir" -type f -mtime +7 -exec rm -f {} + 2>/dev/null
+  if [ "$event" = session-start ]; then
+    # Old files of sessions long gone, and the pipes of channels that ended
+    # without clearing them up
+    find "$rundir" -type f ! -name '*.chan' -mtime +7 -exec rm -f {} + 2>/dev/null
+    for c in "$rundir"/*.chan; do
+      [ -f "$c" ] || continue
+      kill -0 "$(cat "$c")" 2>/dev/null || rm -f "$c" "${c%.chan}.pipe"
+    done
+  fi
 
   # At session start, everything; at Stop, only what this session hasn't heard
   : >"$TMP/new"
@@ -1068,6 +1163,8 @@ cmd_hook() {
   [ "$event" = session-start ] || [ -s "$TMP/say" ] && told_receipts
   if [ ! -s "$TMP/say" ]; then quiet; fi
   [ "$event" = session-start ] && context SessionStart
+  # A Stop that keeps the agent going: it's still busy
+  [ -n "$rec" ] && rec_write "$rec" "$root" "$agent" "$sid" busy
   if [ "$agent" = codex ]; then
     printf '{"decision":"block","reason":%s}\n' "$(json_str <"$TMP/say")"
     exit 0
@@ -1078,15 +1175,13 @@ cmd_hook() {
 
 # -- The mail channel ---------------------------------------------------------------
 
-# An MCP server for Claude Code's channels (research preview): it tells an
-# idle session when mail arrives, so the agent needn't wait for the user's
-# next prompt. A busy session hears of it at Stop, from the hooks, and a
-# waiting one is left alone. The plugin runs it in every Claude Code
-# session; it watches only where the session was started with this
-# plugin's channel (--channels plugin:dot-ai@dot-ai), since elsewhere its
-# notice would be dropped while the hooks took it as told.
-
-NOTICE='You have mail in .ai/mail/inbox/.'
+# An MCP server for Claude Code's channels (research preview), through which
+# delivery tells an idle session its mail has come, so the agent needn't
+# wait for the user's next prompt (tell_session). A busy session hears of
+# it at Stop, from the hooks. The plugin runs it in every Claude Code
+# session; it listens only where the session was started with this
+# plugin's channel (--channels plugin:dot-ai@dot-ai), since elsewhere
+# Claude Code would drop its notice. Nothing polls: it waits on a pipe.
 
 # The raw JSON value of KEY at the top of the one-line object on stdin: a
 # string with its quotes, or a number; nothing for an object, an array or
@@ -1121,53 +1216,50 @@ json_top() {
     { v = top($0, k); if (v != "") print v }'
 }
 
-# A flat field of a JSON file, without its quotes
-file_field() {
-  tr '\n' ' ' <"$1" |
-    sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*"\{0,1\}\([^",}]*\).*/\1/p' | head -n 1
+# Waits on the pipe PIPE, which delivery writes a line to when mail reaches
+# the project at ROOT, and pushes the notice when the session is idle (its
+# record, REC) and there's mail in the inbox it has neither been told of
+# by the hooks (TOLD) nor had a notice for. A push starts a turn, so it
+# marks the session busy until its Stop. Telling stays the hooks' job: mail
+# the agent sets aside, the Stop hook tells it of.
+channel_wait() {
+  croot=$1 cpipe=$2 crec=$3 ctold=$4
+  : >"$TMP/pushed"
+  while :; do
+    [ -p "$cpipe" ] || mkfifo -m 600 "$cpipe" 2>/dev/null || exit 0
+    exec 4<"$cpipe" || exit 0 # waits here for a writer
+    while IFS= read -r _ <&4; do
+      [ "$(rec_get "$crec" state)" = idle ] || continue
+      new=
+      inbox_list "$croot" >"$TMP/now"
+      while IFS= read -r name; do
+        grep -qxF "in:$name" "$ctold" 2>/dev/null && continue
+        grep -qxF "$name" "$TMP/pushed" && continue
+        printf '%s\n' "$name" >>"$TMP/pushed"
+        new=1
+      done <"$TMP/now"
+      [ -n "$new" ] || continue
+      rec_state "$crec" busy
+      printf '{"jsonrpc":"2.0","method":"notifications/claude/channel","params":{"content":"%s"}}\n' "$NOTICE"
+    done
+    exec 4<&-
+  done
 }
 
-# Pushes the notice into the session when mail it hasn't been told of is in
-# the inbox of the project at ROOT and the session is idle. Claude Code
-# keeps a file for each session, with its status: busy, waiting, idle, or
-# shell (idle, with a command the agent started still running).
-channel_watch() {
-  main=$$
-  told=$(run_dir)/$(session_key "$CLAUDE_CODE_SESSION_ID")
-  sessions=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/sessions
-  inbox_list "$1" >"$TMP/known" # what's waiting now, the session-start hook tells of
-  sfile=
-  while sleep 2; do
-    kill -0 "$main" 2>/dev/null || exit 0
-    if [ -z "$sfile" ] || [ ! -f "$sfile" ]; then
-      sfile=$(grep -l "\"sessionId\"[[:space:]]*:[[:space:]]*\"$CLAUDE_CODE_SESSION_ID\"" "$sessions"/*.json 2>/dev/null | head -n 1)
-      [ -n "$sfile" ] || continue
-      case $(ps -o args= -p "$(file_field "$sfile" pid)" 2>/dev/null) in
-        *plugin:dot-ai@*) ;;
-        *) exit 0 ;;
-      esac
-    fi
-    case $(file_field "$sfile" status) in idle | shell) ;; *) continue ;; esac
-    [ -f "$told" ] || continue # the hooks haven't run yet
-    new=
-    inbox_list "$1" >"$TMP/now"
-    while IFS= read -r name; do
-      grep -qxF "$name" "$TMP/known" && continue
-      printf '%s\n' "$name" >>"$TMP/known"
-      grep -qxF "in:$name" "$told" && continue
-      printf 'in:%s\n' "$name" >>"$told"
-      new=1
-    done <"$TMP/now"
-    [ -n "$new" ] &&
-      printf '{"jsonrpc":"2.0","method":"notifications/claude/channel","params":{"content":"%s"}}\n' "$NOTICE"
-  done
+# Whether the session (the channel's parent, Claude Code) was started with
+# this plugin's channel
+channel_heard() {
+  case $(ps -o args= -p "$PPID" 2>/dev/null) in
+    *plugin:dot-ai@*) return 0 ;;
+  esac
+  return 1
 }
 
 cmd_channel() {
   tmpdir
   root=
   if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && r=$(project_root "${CLAUDE_PROJECT_DIR:-.}") &&
-    [ -d "$r/.ai/mail/inbox" ] && [ "$(carrier)" = local ]; then
+    [ -d "$r/.ai/mail/inbox" ] && [ "$(carrier)" = local ] && channel_heard; then
     root=$r
   fi
   while IFS= read -r line; do
@@ -1176,8 +1268,15 @@ cmd_channel() {
     method=${method%\"}
     id=$(printf '%s\n' "$line" | json_top id)
     if [ "$method" = notifications/initialized ] && [ -n "$root" ] && [ -z "$WATCHER" ]; then
-      channel_watch "$root" &
-      WATCHER=$!
+      rundir=$(run_dir)
+      key=$(session_key "$CLAUDE_CODE_SESSION_ID")
+      mkdir -p "$rundir" 2>/dev/null && chmod 700 "$rundir" 2>/dev/null
+      CHAN_PIPE=$rundir/$key.pipe CHAN_PID=$rundir/$key.chan
+      rm -f "$CHAN_PIPE"
+      if mkfifo -m 600 "$CHAN_PIPE" 2>/dev/null && printf '%s\n' "$$" >"$CHAN_PID"; then
+        channel_wait "$root" "$CHAN_PIPE" "$rundir/$key.session" "$rundir/$key" &
+        WATCHER=$!
+      fi
     fi
     [ -n "$method" ] && [ -n "$id" ] || continue # a notification, or a response
     case $method in

@@ -168,8 +168,8 @@ sessions on the project) never send: they draft with `--by "<who>"`, and
 the lead reviews the draft as its own before sending it.
 
 **Receiving.** The hooks tell you when mail arrives in `.ai/mail/inbox/`
-(so may a channel notice, "You have mail in .ai/mail/inbox/.", even
-while you're idle):
+(while you're idle, the notice is just "You have mail in
+.ai/mail/inbox/."):
 deal with each message as Processing the inbox says, then file it with
 `dot-ai mail done NAME` (its file name or its id). When the user says
 "check mail" (agent mail, not email), `dot-ai mail check` lists the inbox.
