@@ -12,7 +12,7 @@
 
 LC_ALL=C
 export LC_ALL
-VERSION=0.6.0
+VERSION=0.6.1
 MAX_DEPTH=4 # how far below a search root a project may sit
 TAB=$(printf '\t')
 
@@ -1129,7 +1129,8 @@ file_field() {
 
 # Pushes the notice into the session when mail it hasn't been told of is in
 # the inbox of the project at ROOT and the session is idle. Claude Code
-# keeps a file for each session, with its status (busy, idle, waiting).
+# keeps a file for each session, with its status: busy, waiting, idle, or
+# shell (idle, with a command the agent started still running).
 channel_watch() {
   main=$$
   told=$(run_dir)/$(session_key "$CLAUDE_CODE_SESSION_ID")
@@ -1146,7 +1147,7 @@ channel_watch() {
         *) exit 0 ;;
       esac
     fi
-    [ "$(file_field "$sfile" status)" = idle ] || continue
+    case $(file_field "$sfile" status) in idle | shell) ;; *) continue ;; esac
     [ -f "$told" ] || continue # the hooks haven't run yet
     new=
     inbox_list "$1" >"$TMP/now"

@@ -13,7 +13,8 @@ carrier), and `init` and `install`; `dot-ai-mail` stays as a shim for
 `.` between digits in a file name's topic (`landing-v0.8.2`), as the
 spec always allowed (@overlore's note, 2026-10-31). 0.6.0 (2026-11-02)
 adds `dot-ai channel`, which tells an idle Claude Code session that mail
-has arrived (below, The mail channel). Tested by
+has arrived (below, The mail channel); 0.6.1 also when the session is
+idle with a command still running in the background. Tested by
 `tests/dot-ai.sh` (`just test`); its hooks ship in the dot-ai plugin
 (`hooks/hooks.json`).*
 
@@ -103,7 +104,10 @@ idle agent is fine: most mail the user approved at the sending end.
 
 - **Idle:** Claude Code keeps a file for each session
   (`~/.claude/sessions/<pid>.json`, found by `CLAUDE_CODE_SESSION_ID`)
-  whose `status` is `busy`, `idle` or `waiting`. Neither is documented;
+  whose `status` is `busy`, `waiting`, `idle`, or `shell`: idle, with a
+  command the agent started in the background still running (a dev
+  server can keep a session there for hours), so it counts as idle (the
+  live test, 2026-11-02). Neither is documented;
   if either changes, the channel just stops pushing and the hooks still
   tell, as before.
 - **Told once:** it adds what it pushes to the file where the hooks keep

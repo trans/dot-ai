@@ -351,6 +351,9 @@ if [ "$CARRIER" = local ]; then
   check "channel: nothing while busy" '[ "$(pushes)" = 1 ]'
   status idle
   check "channel: pushed once idle, if no hook told of it" 'within "[ \"\$(pushes)\" = 2 ]"'
+  status shell # idle, with a command the agent started still running
+  (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "channel four") >/dev/null
+  check "channel: pushed while a command runs in the background" 'within "[ \"\$(pushes)\" = 3 ]"'
   exec 3>&-
   check "channel: ends with its input" 'within "! kill -0 $chan 2>/dev/null"'
   # Started without this plugin's channel: it doesn't watch
