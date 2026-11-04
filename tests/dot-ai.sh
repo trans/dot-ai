@@ -59,7 +59,8 @@ count() { ls "$1" 2>/dev/null | wc -l | tr -d ' '; }
 
 project alpha 'handle: alpha   # a comment'
 project beta 'handle: "@beta"'
-project group/Gamma.Site ''
+project group/Gamma.Site 'description: a config without a handle'
+project bare '' # mail folders, but no config: no agent set up
 project twin1 'handle: twin'
 project twin2 "handle: 'twin'"
 project .hidden/eps 'handle: eps'
@@ -73,6 +74,13 @@ check "find: quoted handle" '[ "$(carry find beta)" = "$P/beta" ]'
 check "find: folded directory name" '[ "$(carry find gamma-site)" = "$P/group/Gamma.Site" ]'
 check "find: two projects, one address" '! carry find twin 2>/dev/null'
 check "find: hidden directories and links skipped" '! carry find eps 2>/dev/null && [ "$(carry find | grep -c "/alpha$")" = 1 ]'
+check "find: marks a project without a config" 'carry find | grep -q "^@bare  *$P/bare (no .ai/config.yml: no mail is delivered to it)$" && ! carry find | grep -q "/alpha (no"'
+
+# No delivery into a project without a config
+printf 'x\n' >"$A/outbox/20261015-135900Z-@bare--unread.md"
+out=$(cd "$P/alpha" && carry deliver)
+check "deliver: none into a project without a config" 'printf "%s\n" "$out" | grep -qxF "left in the outbox: 20261015-135900Z-@bare--unread.md: @bare ($P/bare) has no .ai/config.yml, so no agent is set up there" && [ "$(count "$P/bare/.ai/mail/inbox")" = 0 ]'
+rm -f "$A/outbox/20261015-135900Z-@bare--unread.md"
 
 # Delivering
 printf 'By: a helper\n\nHello.\n' >"$A/outbox/20261015-140000Z-@beta--hello.md"

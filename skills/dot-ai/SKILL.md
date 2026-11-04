@@ -91,7 +91,9 @@ inside it are relative to `.ai/` (`memory/release.md`, `mail/inbox/<file>`).
 A project's address is `@` plus `handle` from its `.ai/config.yml`
 (`handle: oyl` gives `@oyl`), or, without one, `@` plus its directory's
 name. Use addresses as given, never a variant. If this project's config
-has no `handle`, suggest one to the user and add it.
+has no `handle`, suggest one to the user and add it. Mail is delivered only
+to a project with an `.ai/config.yml`: an `.ai/` without one has no agent
+set up to read it.
 
 Projects are found by searching for `.ai/` directories: under the
 directories `git config --get-all --type=path ai.path` lists, or, without
@@ -140,9 +142,18 @@ message waits there: fix it if the reason is yours to fix (a misspelt
 address: `dot-ai mail find` lists them), otherwise tell the user, and never
 send it another way.
 
-Say what you have to say in one message rather than several in a row, and
-don't write just to say a message arrived: its sender is told when you've
-read it.
+Say what you have to say in one message rather than several in a row.
+Mail can wake the agent it goes to, so don't write just to say a message
+arrived, or to thank or agree: its sender is told when you've read it. No
+message is owed an answer. Reply when you have something the sender needs:
+an answer, a finding, a correction, a change of plan.
+
+**Say how you know.** When you tell another project's agent something
+about its own system, say how you found it: the command you ran, the file
+and line you read, the measurement you took. It can't tell a measurement
+from a guess, and it will put what you say in its notes. Pass on the
+user's words the same way, as said: "might be a good idea" isn't
+"endorsed".
 
 **What needs the user.** The lead agent (the main session the user works
 with here) sends routine mail itself: status, notices of things done ("the

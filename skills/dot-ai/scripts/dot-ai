@@ -12,7 +12,7 @@
 
 LC_ALL=C
 export LC_ALL
-VERSION=0.7.0
+VERSION=0.8.0
 MAX_DEPTH=4 # how far below a search root a project may sit
 TAB=$(printf '\t')
 
@@ -467,6 +467,12 @@ deliver() {
           printf 'left in the outbox: %s: %s\n' "$name" "$dir"
           continue
         fi
+        # A project without a config has no agent set up to read its mail,
+        # whatever folders its .ai/ holds
+        if [ ! -f "$dir/.ai/config.yml" ]; then
+          printf 'left in the outbox: %s: %s (%s) has no .ai/config.yml, so no agent is set up there\n' "$name" "$to" "$dir"
+          continue
+        fi
         dest=$dir/.ai/mail/inbox
         if [ ! -d "$dest" ]; then
           printf 'left in the outbox: %s: %s (%s) has no .ai/mail/inbox/\n' "$name" "$to" "$dir"
@@ -905,13 +911,21 @@ cmd_find() {
   here=$(project_root .) || here=$(pwd -P)
   scan "$here"
   if [ -z "${1:-}" ]; then
-    awk -F '\t' '$1 != "!" { printf "%-24s %s\n", $1, $2 }' "$MAP"
+    while IFS="$TAB" read -r a d; do
+      [ "$a" = "!" ] && continue
+      if [ -f "$d/.ai/config.yml" ]; then
+        printf '%-24s %s\n' "$a" "$d"
+      else
+        printf '%-24s %s (no .ai/config.yml: no mail is delivered to it)\n' "$a" "$d"
+      fi
+    done <"$MAP"
     awk -F '\t' '$1 == "!" { print "(can'\''t read the handle) " $2 "/.ai/config.yml" }' "$MAP"
     awk -F '\t' '$1 != "!" { n[$1]++ } END { for (a in n) if (n[a] > 1) print "two projects have the address " a ": nothing is delivered to it" }' "$MAP"
     return 0
   fi
   if dir=$(lookup "@${1#@}"); then
     printf '%s\n' "$dir"
+    [ -f "$dir/.ai/config.yml" ] || warn "$dir has no .ai/config.yml: no mail is delivered to it"
   else
     die "$dir"
   fi

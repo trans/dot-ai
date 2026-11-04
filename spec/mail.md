@@ -254,8 +254,10 @@ the outbox (hidden files and `.gitkeep` aside); a post to a topic goes as
 Topics, below, says:
 
 1. **Find the recipient** (above). If it isn't found, is found twice, or
-   has no `mail/inbox/`, the message stays in the outbox, and the carrier
-   says why.
+   has no `config.yml` or no `mail/inbox/` in its `.ai/`, the message
+   stays in the outbox, and the carrier says why. A project without a
+   config has no agent set up to read its mail, whatever folders its
+   `.ai/` holds.
 2. **Take its id** (Ids, above).
 3. **Deliver it:** write it into the recipient's `mail/inbox/` as an inbox
    file (below) with `Via: local`, and its `Re:` line if it has one, unless

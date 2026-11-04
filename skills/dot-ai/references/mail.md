@@ -81,6 +81,7 @@ the user the reason.
 |---|---|
 | no project on this machine has the address @x | Check the address with `dot-ai mail find` (every project) or `dot-ai mail find x`. If it's misspelt, rename the file. Otherwise tell the user: the project may have no `.ai/`, or sit outside `ai.path`. |
 | two projects have the address @x | Tell the user: two projects' configs give the same handle. |
+| @x (DIR) has no .ai/config.yml, so no agent is set up there | Tell the user: nobody reads mail there until the project is set up (`dot-ai init` in it). |
 | @x (DIR) has no .ai/mail/inbox/ | Tell the user: that project's `.ai/` has no mail folders. |
 | there's no topic #x | Check the name with `dot-ai mail topic`. If it's misspelt, rename the file; if the topic is yours to make, make it; otherwise ask. |
 | its name isn't <time>-<address>--<topic>.md, or X isn't an address | Rename the file (it's yours), then deliver again. |

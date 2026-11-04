@@ -16,7 +16,12 @@ adds `dot-ai channel`, which tells an idle Claude Code session that mail
 has arrived; 0.6.1 also when the session is idle with a command still
 running in the background. 0.7.0 (2026-11-03) has delivery tell the
 session, Codex's too, with nothing polling (below, Telling an idle
-session). Tested by
+session). 0.8.0 (2026-11-04) delivers only to a project with an
+`.ai/config.yml`, and `mail find` marks those without one: an `.ai/`
+holding only `mail/` had been taking mail that no agent would read
+(@guestservices' note, vetted by @arcana); the skill adds "say how you
+know" and says no message is owed an answer, now that mail wakes agents.
+Tested by
 `tests/dot-ai.sh` (`just test`); its hooks ship in the dot-ai plugin
 (`hooks/hooks.json`).*
 
@@ -41,6 +46,7 @@ server and nothing beyond the file system, and it doesn't need Arcana.
   (`handle: "@oyl"`). A config whose handle it can't read that way is
   reported, and that project gets no mail from it. Without a `handle`,
   the directory's name, folded as [Identity](../spec/identity.md) says.
+  A project without a config gets no mail at all.
 
 ## Commands
 
