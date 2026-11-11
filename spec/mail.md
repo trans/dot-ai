@@ -472,6 +472,13 @@ one session per project, its newest open one, whoever runs it, so two
 sessions don't both answer it. Session records (below) are how programs
 see each other's sessions.
 
+A program that starts a session (`claude -p`, say) sets `DOT_AI_BY` to
+its own name in the session's environment. Hooks running inside that
+session then write it as the record's `by`, still tell the session at its
+start and Stop, and leave pushing, waking and resuming it to that
+program. Here inheriting the variable is the point: everything the
+session runs knows who runs it.
+
 ## Session records
 
 An extra, for programs that run sessions: a record of each one, so the
@@ -493,14 +500,15 @@ way, so each can read the others'.
 | `root` | The project's directory, with symbolic links resolved |
 | `agent` | The harness: `claude`, `codex`, `copious`, … |
 | `id` | The harness's own id for the session, which resumes it |
-| `by` | The program that runs the session and writes the record: `dot-ai`, `aix`, `tom`, … |
+| `by` | The program that runs the session: `dot-ai`, `aix`, `tom`, … (`DOT_AI_BY`, above), a plain name |
+| `pid` | The harness's process, where there is one (Claude Code's), optional |
 | `state` | `idle` (waiting for its user), `busy` (in a turn) or `ended` |
 
 - **A project's newest session** is the one whose record changed last
   (the file's modification time).
 - **Only the writer changes a record.** A session that stopped without
-  saying so may be left `idle` or `busy`; a reader that can tell (a process
-  gone, a lock free) treats it as ended. A record ended a week ago may be
+  saying so may be left `idle` or `busy`; a reader that can tell (its
+  `pid` gone, by `kill -0`; a lock free) treats it as ended. A record ended a week ago may be
   removed.
 
 ## The carrier's files
