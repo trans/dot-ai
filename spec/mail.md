@@ -61,8 +61,8 @@ one project's folders and another's:
 - keeps track of the mail each project sent until it's read, for its
   receipts (Noticing mail, below).
 
-Telling a session what has come isn't only the carrier's: it's for
-whatever runs the session (Noticing mail, below).
+Telling a session what has come is its runner's (Runners, below): the
+carrier moves mail, the runner tells its sessions of it.
 
 Which one it is, is the person's choice, in their git config's
 `ai.carrier` (`git config --global ai.carrier arcana`), read from their
@@ -76,12 +76,11 @@ lowercase letters, digits and hyphens, never a path or a command line.
   hooks. It reaches the projects on this machine, by moving files. It's
   usable, but it's mainly what this spec's tests (`tests/dot-ai.sh`) run
   against, and every carrier must pass them too.
-- Any other name `X` is a program on `PATH` called `X`, which answers the
-  carrier's commands (below) as `X mail …` and `X hook …`. Besides the
-  reference: `arcana`, the **Arcana** bus, which reaches whatever the bus
-  reaches (other machines, and agents that don't share this machine's
-  disk); and `aix`, the **aix** tmux manager (planned, 2026-11-11), which
-  also pushes to idle sessions and wakes them.
+- `arcana`: the **Arcana** bus, which reaches whatever the bus reaches
+  (other machines, and agents that don't share this machine's disk). Like
+  any carrier but the reference, it's the program of its name on `PATH`,
+  answering the carrier's commands (below) as `arcana mail …` and
+  `arcana hook …`.
 
 **The carrier's commands** are what every carrier answers, with the
 arguments, exit status and output of the reference's own (the tests check
@@ -105,16 +104,11 @@ have only a shell.
 
 **Handing off.** Under a carrier other than `local`, the reference's
 `mail deliver`, `mail topic`, `mail read` and `mail receipts` hand the
-work to it (`X mail deliver …`). Given `--self`, they do it themselves,
-whatever `ai.carrier` says: that's how a carrier can use the reference's
-delivery for its own without the work being handed straight back. Only a
-carrier passes it. It's a flag, not an environment variable, so that
-nothing the carrier starts (a session, say) inherits it.
+work to it (`arcana mail deliver …`).
 
 **With nothing else running.** A carrier's mail commands work with no
 server, bus or other program running: delivery, topics and receipts need
-only the file system. Only pushing to idle sessions (Noticing mail,
-below) may need the carrier's own program up.
+only the file system.
 
 **Only the machine's carrier carries mail.** It alone delivers outboxes,
 writes inbox files into projects, files the originals under `sent/`,
@@ -322,9 +316,8 @@ it's never lost, and a run that stopped between steps 3 and 4 delivers it
 again, which the id check catches.
 
 Delivery runs when a session starts, after each turn, and when it ends:
-from the carrier's session hooks, or, in a harness that tells its own
-sessions (Noticing mail, below), by the harness calling the carrier's
-`mail deliver`. It doesn't commit: the sender's agents commit `sent/`, and the
+from the carrier's session hooks, or from a runner that tells its own
+sessions (Runners, below), calling the carrier's `mail deliver`. It doesn't commit: the sender's agents commit `sent/`, and the
 recipient's commit `received/` as they process their inbox (below).
 
 **A carrier that keeps mail elsewhere** (the Arcana bus, a store on a
@@ -444,9 +437,10 @@ New files in `mail/inbox/` are new mail. The agent is told when the inbox
 holds any, and when a followed topic has posts after the project's place
 (`2 new posts in #datadungeon`): when a session starts, and before it
 finishes a turn, so what arrived meanwhile is handled before the agent
-stops. Whatever runs the session tells it: the carrier's session hooks
-(`hook EVENT`), in a harness that can't do it itself (Claude Code, Codex),
-or the harness itself, where it reads its project's `.ai/` (T.O.M.).
+stops. The session's runner tells it (Runners, below): the carrier's
+session hooks (`hook EVENT`) in a harness that can't do it itself (Claude
+Code, Codex), or the runner itself, where it reads its project's `.ai/`
+(T.O.M.).
 
 A message has been read once it's in the recipient's `received/`. The
 sender is told so, a **receipt** (`@oyl read
@@ -460,36 +454,52 @@ keeps the messages waiting for one in the sender's outbox (The carrier's
 files, below), and its `mail receipts` says which have come; posts get no
 receipts.
 
-**Pushing to idle sessions** is an extra a carrier may offer: telling a
-session that's waiting for its user, rather than at its next start or
-Stop (Claude Code's channels, `codex queue`). So is **waking** a project
-with no session open, by resuming its last session. Neither is required.
+## Runners
 
-**One runner per session.** The program that runs a session is the only
-one that tells it of mail, starts a turn in it, or resumes it: none tells,
-wakes or resumes a session another program holds open. Mail is told to
-one session per project, its newest open one, whoever runs it, so two
-sessions don't both answer it. Session records (below) are how programs
-see each other's sessions.
+A session's **runner** is the program that runs it: aix, in its tmux
+panes; T.O.M., for its own sessions and those its fleet starts; or, for a
+session the person started themselves, the harness with the carrier's
+hooks. The carrier moves the files; the runner tells its sessions of
+them. So T.O.M. doesn't deliver to its own projects: the carrier puts
+their mail in their inboxes, and T.O.M., as their runner, tells its
+sessions.
 
-A program that starts a session (`claude -p`, say) sets `DOT_AI_BY` to
-its own name in the session's environment. Hooks running inside that
-session then write it as the record's `by`, still tell the session at its
-start and Stop, and leave pushing, waking and resuming it to that
-program. Here inheriting the variable is the point: everything the
-session runs knows who runs it.
+- **One runner per session.** Only a session's runner tells it of mail,
+  starts a turn in it, or resumes it: no program tells, wakes or resumes
+  a session another holds open. Mail is told to one session per project,
+  its newest open one, so two sessions don't both answer it.
+- **Naming the runner.** A program that starts a session (`claude -p`,
+  say) sets `DOT_AI_BY` to its own name in the session's environment, and
+  here inheriting it is the point: hooks running inside the session write
+  it as the record's `by` (Session records, below), still tell the session
+  at its start and Stop, and leave pushing, waking and resuming it to the
+  runner. A session started without it is recorded with the hooks' own
+  carrier as its runner (`dot-ai`, `arcana`).
+- **Telling.** When the carrier has put mail in a project's inbox, it
+  tells the project's newest open session by running `<by> tell <id>`,
+  with the record's `by` and `id`. The runner exits 0 once the session
+  has been told, or will be at the end of its turn. If the session isn't
+  open, the runner marks its record `ended` and exits 3, and the carrier
+  tries the next newest. On any other status the carrier stops there, and
+  the session hears at its next start or Stop.
+- **Extras.** Pushing to an idle session (one waiting for its user)
+  instead of at its next start or Stop, as with Claude Code's channels or
+  `codex queue`, and **waking** a project with no session open, by
+  resuming its last session, are a runner's to offer. Neither is
+  required.
 
 ## Session records
 
-An extra, for programs that run sessions: a record of each one, so the
-others can see which sessions are open and whether they're busy (One
-runner per session, above). A program that keeps them keeps them this
-way, so each can read the others'.
+Every runner keeps a record of each session it runs, so the others can
+see which sessions are open and whether they're busy, and the carrier
+knows whom to tell (Runners, above). They're kept the same way whichever
+program writes them, so each can read the others'.
 
 - **Where:** per person, outside `.ai/`, since they're about this machine
   only: `$XDG_STATE_HOME/dot-ai/sessions/` (`~/.local/state/dot-ai/sessions/`
-  where it's unset), whichever program writes them. They outlast a reboot
-  and the session's end.
+  where it's unset), whichever program writes them, private to the
+  person (mode 700), since the carrier runs the program each record
+  names. They outlast a reboot and the session's end.
 - **A file per session,** `<key>.session`, its key the harness's session
   id with each character other than `A-Za-z0-9_.-` turned into `_`,
   written under a hidden name and renamed into place.
@@ -500,7 +510,7 @@ way, so each can read the others'.
 | `root` | The project's directory, with symbolic links resolved |
 | `agent` | The harness: `claude`, `codex`, `copious`, … |
 | `id` | The harness's own id for the session, which resumes it |
-| `by` | The program that runs the session: `dot-ai`, `aix`, `tom`, … (`DOT_AI_BY`, above), a plain name |
+| `by` | The session's runner (Runners, above), a plain name, run as `<by> tell`: `dot-ai`, `arcana`, `aix`, `tom`, … |
 | `pid` | The harness's process, where there is one (Claude Code's), optional |
 | `state` | `idle` (waiting for its user), `busy` (in a turn) or `ended` |
 

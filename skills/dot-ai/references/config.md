@@ -44,7 +44,7 @@ Per-person settings that hold across projects live in git config instead:
 for projects when delivering mail (multi-valued:
 `git config --global --add ai.path ~/Projects`), the first of which keeps
 the topics; and `ai.carrier`, what carries the mail (`local`, `dot-ai`
-itself, when unset; `arcana`; or another carrier's name). Both are read
+itself, when unset; or `arcana`). Both are read
 from the person's own git config (`git config --global`, else
 `--system`), never from a repository's: a tool that finds one set there
 warns and goes on without it.
