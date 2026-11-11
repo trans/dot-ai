@@ -473,15 +473,32 @@ sessions.
   here inheriting it is the point: hooks running inside the session write
   it as the record's `by` (Session records, below), still tell the session
   at its start and Stop, and leave pushing, waking and resuming it to the
-  runner. A session started without it is recorded with the hooks' own
-  carrier as its runner (`dot-ai`, `arcana`).
+  runner. A person who starts sessions through a launcher of their own (a
+  shell function, say) can set it there. A session started without it
+  gets the person's default runner, the first of git config's `ai.runner`
+  (below), or, without one, the hooks' own carrier (`dot-ai`, `arcana`).
+  That default is how a harness whose hooks no launcher reaches (Codex's,
+  which run in its app server) still gets a runner.
+- **Which runners may run.** Runners are named like carriers: lowercase
+  letters, digits and hyphens. git config's `ai.runner`, read like
+  `ai.carrier` (from the person's own config only, see
+  [Config](config.md)), lists the ones the person allows, a value each;
+  the first is the default above. The carrier runs only those, and itself:
+  a record naming anything else is left alone, so a stray record can't
+  make it run some other program.
 - **Telling.** When the carrier has put mail in a project's inbox, it
   tells the project's newest open session by running `<by> tell <id>`,
-  with the record's `by` and `id`. The runner exits 0 once the session
-  has been told, or will be at the end of its turn. If the session isn't
-  open, the runner marks its record `ended` and exits 3, and the carrier
-  tries the next newest. On any other status the carrier stops there, and
-  the session hears at its next start or Stop.
+  with the record's `by` and `id`, if that runner is allowed. The runner
+  exits:
+
+  | Status | Means | The carrier |
+  |---|---|---|
+  | 0 | The session has been told, or will be at the end of its turn | is done |
+  | 3 | The session isn't open; the runner has marked its record `ended` | tries the next newest |
+  | 4 | The runner can't push to it | stops; the session hears at its next start or Stop |
+  | other | It failed | stops, and says so |
+
+  The reference doesn't push, so `dot-ai tell` always exits 4 (or 3).
 - **Extras.** Pushing to an idle session (one waiting for its user)
   instead of at its next start or Stop, as with Claude Code's channels or
   `codex queue`, and **waking** a project with no session open, by
@@ -510,7 +527,7 @@ program writes them, so each can read the others'.
 | `root` | The project's directory, with symbolic links resolved |
 | `agent` | The harness: `claude`, `codex`, `copious`, … |
 | `id` | The harness's own id for the session, which resumes it |
-| `by` | The session's runner (Runners, above), a plain name, run as `<by> tell`: `dot-ai`, `arcana`, `aix`, `tom`, … |
+| `by` | The session's runner (Runners, above), run as `<by> tell`: `dot-ai`, `arcana`, `aix`, `tom`, … Lowercase letters, digits and hyphens only |
 | `pid` | The harness's process, where there is one (Claude Code's), optional |
 | `state` | `idle` (waiting for its user), `busy` (in a turn) or `ended` |
 

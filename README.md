@@ -4,8 +4,9 @@
 `local` (the reference) and `arcana`, each answering the carrier's
 commands; a carrier moves mail, and a session's runner (aix, T.O.M., or
 the harness with the carrier's hooks) tells it, through session records
-every runner keeps; pushing and waking are a runner's extras;
-`ai.carrier` and `ai.path` are read only from the person's own git
+every runner keeps, and only runners the person allows (`ai.runner`)
+are run; pushing and waking are a runner's extras; `ai.carrier`,
+`ai.path` and `ai.runner` are read only from the person's own git
 config. 0.3: mail files are named time first
 (`20261013-190539Z-@arcana--topic.md`), so folders list in order; the inbox
 is machine-local, and mail once read is filed under `mail/received/`;

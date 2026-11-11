@@ -44,10 +44,12 @@ Per-person settings that hold across projects live in git config instead:
 for projects when delivering mail (multi-valued:
 `git config --global --add ai.path ~/Projects`), the first of which keeps
 the topics; and `ai.carrier`, what carries the mail (`local`, `dot-ai`
-itself, when unset; or `arcana`). Both are read
-from the person's own git config (`git config --global`, else
-`--system`), never from a repository's: a tool that finds one set there
-warns and goes on without it.
+itself, when unset; or `arcana`); and `ai.runner`, the runners the
+person allows to be told of mail (multi-valued; the first is the runner
+for sessions started without one). All three are read from the person's
+own git config (`git config --global`, else `--system`), never from a
+repository's: a tool that finds one set there warns and goes on without
+it.
 
 `.ai/config.yml` lives on the `ai` branch. A checkout without the `.ai`
 worktree has no config, which readers treat like an empty one.
