@@ -1,6 +1,11 @@
 # dot-ai
 
-*Draft 0.3, 2026-10-13*. 0.3: mail files are named time first
+*Draft 0.4, 2026-11-11*. 0.4: carriers. Any carrier but the reference is
+a program of its own name, answering the carrier's commands (`X mail …`);
+the reference's `--self`; telling a session is apart from carrying mail,
+and pushing and waking are extras; one runner per session, and session
+records any program can read; `ai.carrier` and `ai.path` are read only
+from the person's own git config. 0.3: mail files are named time first
 (`20261013-190539Z-@arcana--topic.md`), so folders list in order; the inbox
 is machine-local, and mail once read is filed under `mail/received/`;
 `Intake/` and `Outtake/` (lowercase until 2026-10-19) move out of `.ai/`
@@ -135,6 +140,9 @@ runs agents and writes their transcripts.
   signing applies once the user turns it on in git. Key fingerprints could
   tell apart machines with the same name, and age encryption to SSH keys
   could replace git-crypt.
+- **T.O.M. and the carrier.** T.O.M. delivers to its own projects. How
+  that fits one carrier per person (T.O.M. as a carrier itself, `ai.carrier
+  tom`, is one way) is open.
 - **A format version.** Transcript headers and record files don't yet say
   which version of this spec they follow.
 - **Two checkouts of one project** on a machine (a second clone to try

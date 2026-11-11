@@ -96,7 +96,8 @@ to a project with an `.ai/config.yml`: an `.ai/` without one has no agent
 set up to read it.
 
 Projects are found by searching for `.ai/` directories: under the
-directories `git config --get-all --type=path ai.path` lists, or, without
+directories `git config --global --get-all --type=path ai.path` lists
+(never a repository's own `ai.path`), or, without
 any, under the outermost project enclosing this one (this project's parent
 directory, if none encloses it). Look below projects too, since a project
 may sit inside another (an overseer that keeps track of the projects below

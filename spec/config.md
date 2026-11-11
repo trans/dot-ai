@@ -53,6 +53,15 @@ here: the machine's name (`ai.machine`, see [Identity](identity.md)), where
 to look for projects (`ai.path`) and what carries their mail
 (`ai.carrier`, see [Mail](mail.md)), and the person's own name and email.
 
+Read `ai.path` and `ai.carrier` from the person's own git config only:
+`git config --global` (which takes in `$XDG_CONFIG_HOME/git/config` as
+well), or `git config --system` where that sets none. Never from a
+repository's own config, which a plain `git config --get` lets win: one
+repository's `ai.carrier` would hand that project's mail to another
+carrier, or to none, while every other project's went on as before. A
+tool that finds either key set in a repository's config warns, naming
+the repository, and goes on as if it weren't there.
+
 ## Carriers' own files
 
 A mail carrier may keep machine-local files in `.ai/`, listed in the

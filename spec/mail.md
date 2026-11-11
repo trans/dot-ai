@@ -52,35 +52,80 @@ A project receives mail once it has `mail/inbox/`; one with `.ai/` but no
 
 ## The carrier
 
-Each machine has one carrier, which does everything between one project's
-folders and another's:
+Each person has one carrier on a machine, which does everything between
+one project's folders and another's:
 
 - delivers each project's outbox (Delivery, below), to the projects it
   reaches and the topics it keeps;
 - keeps the topics, and hands their posts to readers (Topics, below);
-- tells agents when mail or posts are waiting, and when the mail they
-  sent has been read (Noticing mail, below).
+- keeps track of the mail each project sent until it's read, for its
+  receipts (Noticing mail, below).
 
-Which one it is, is the machine's choice, in git config's `ai.carrier`
-(`git config --global ai.carrier arcana`):
+Telling a session what has come isn't only the carrier's: it's for
+whatever runs the session (Noticing mail, below).
 
-- `local`, the default: **dot-ai**, a shell script shipped with the
-  dot-ai skill (`skills/dot-ai/scripts/` in this repository), whose plugin
-  runs it from Claude Code's and Codex's session hooks. It reaches the
-  projects on this machine, by moving files. Its `dot-ai mail` commands
-  are also how agents send, file and drop mail under any carrier: under
-  another, they hand the carrier's work to it.
-- `arcana`: the **Arcana** bus, whose session hooks and MCP bridge do the
-  same, and reach whatever the bus reaches: other machines, and agents that
-  don't share this machine's disk.
+Which one it is, is the person's choice, in their git config's
+`ai.carrier` (`git config --global ai.carrier arcana`), read from their
+own config only, never a repository's (see [Config](config.md)). "The
+machine's carrier", in this spec, is that one. Its value is a name:
+lowercase letters, digits and hyphens, never a path or a command line.
 
-A carrier that isn't the machine's stays out of mail entirely, so only one
-program on a machine moves or files mail. Its hooks don't deliver or tell
-of mail, it writes no mail files, and its tools refuse to send mail:
-Arcana's `arcana_deliver` to a project, or `arcana_publish` to a topic,
-answers that the message goes in the outbox instead. Arcana is still the
-way to call services on a machine whose carrier is `local`, since a call
-to a service isn't mail.
+- `local`, the default: **dot-ai**, the reference carrier, a shell script
+  shipped with the dot-ai skill (`skills/dot-ai/scripts/` in this
+  repository), whose plugin runs it from Claude Code's and Codex's session
+  hooks. It reaches the projects on this machine, by moving files. It's
+  usable, but it's mainly what this spec's tests (`tests/dot-ai.sh`) run
+  against, and every carrier must pass them too.
+- Any other name `X` is a program on `PATH` called `X`, which answers the
+  carrier's commands (below) as `X mail …` and `X hook …`. Besides the
+  reference: `arcana`, the **Arcana** bus, which reaches whatever the bus
+  reaches (other machines, and agents that don't share this machine's
+  disk); and `aix`, the **aix** tmux manager (planned, 2026-11-11), which
+  also pushes to idle sessions and wakes them.
+
+**The carrier's commands** are what every carrier answers, with the
+arguments, exit status and output of the reference's own (the tests check
+them):
+
+| Command | Does |
+|---|---|
+| `mail deliver [DIR]` | Delivers the outbox of the project at or above DIR (Delivery, below), and says, a line each, what it delivered, and what it left and why |
+| `mail topic [TOPIC DESCRIPTION]` | Makes a topic, or lists them all (Topics, below) |
+| `mail read TOPIC [--after N] [DIR]` | The posts after the project's place in TOPIC, or after post N, and moves the place on (Topics, below) |
+| `mail receipts [DIR]` | Checks the receipts the project's outbox is waiting for, says each that's come, a line each (`@oyl read 20261010-180322Z-@oyl--schema.md`), and drops it (The carrier's files, below) |
+| `hook EVENT [--agent claude\|codex]` | What session hooks run, for a harness that can't tell its sessions itself (Noticing mail, below) |
+
+The reference's other commands (`send`, `draft`, `done`, `rm`, `check`,
+`find`) work under any carrier: they write and move files in the
+project's own folders, and hand the carrier's part to it. A program that
+implements these formats itself (T.O.M., say) may write its outbox and
+call the carrier's `mail deliver` directly (`dot-ai mail deliver` under
+`local`). The reference's commands are the convenience for agents that
+have only a shell.
+
+**Handing off.** Under a carrier other than `local`, the reference's
+`mail deliver`, `mail topic`, `mail read` and `mail receipts` hand the
+work to it (`X mail deliver …`). Given `--self`, they do it themselves,
+whatever `ai.carrier` says: that's how a carrier can use the reference's
+delivery for its own without the work being handed straight back. Only a
+carrier passes it. It's a flag, not an environment variable, so that
+nothing the carrier starts (a session, say) inherits it.
+
+**With nothing else running.** A carrier's mail commands work with no
+server, bus or other program running: delivery, topics and receipts need
+only the file system. Only pushing to idle sessions (Noticing mail,
+below) may need the carrier's own program up.
+
+**Only the machine's carrier carries mail.** It alone delivers outboxes,
+writes inbox files into projects, files the originals under `sent/`,
+keeps the topics and checks receipts. Another carrier on the machine does
+none of that: it writes no mail files, not even of mail that reached it
+some other way, and its tools refuse to send mail (Arcana's
+`arcana_deliver` to a project, or `arcana_publish` to a topic, answers
+that the message goes in the outbox instead). It may still tell a session
+what its own mailbox holds (a bus mailbox, say): that's telling, not
+carrying. Arcana is still the way to call services on a machine whose
+carrier is `local`, since a call to a service isn't mail.
 
 Every carrier keeps what it keeps in projects' folders the same way, under
 the same locks (The carrier's files, below). So the machine's carrier can
@@ -223,8 +268,10 @@ its address comes from its own config, so a project that moves is found
 where it is now.
 
 - **Where to search:** the directories in git config's `ai.path`, a
-  multi-valued key (`git config --global --add ai.path ~/Projects`; read
-  with `git config --get-all --type=path ai.path`, which expands `~`).
+  multi-valued key (`git config --global --add ai.path ~/Projects`), read
+  from the person's own config only (see [Config](config.md)): `git config
+  --global --get-all --type=path ai.path`, which expands `~`, or the same
+  with `--system` where that lists none.
   Without any, the outermost project enclosing the sender (its nearest
   ancestor directory with `.ai/`, then that one's, and so on), or, if no
   project encloses it, the sender's parent directory.
@@ -274,8 +321,10 @@ Delivery is at least once: a message stays in the outbox until step 4, so
 it's never lost, and a run that stopped between steps 3 and 4 delivers it
 again, which the id check catches.
 
-The carrier delivers when a session starts, after each turn, and when it
-ends. It doesn't commit: the sender's agents commit `sent/`, and the
+Delivery runs when a session starts, after each turn, and when it ends:
+from the carrier's session hooks, or, in a harness that tells its own
+sessions (Noticing mail, below), by the harness calling the carrier's
+`mail deliver`. It doesn't commit: the sender's agents commit `sent/`, and the
 recipient's commit `received/` as they process their inbox (below).
 
 **A carrier that keeps mail elsewhere** (the Arcana bus, a store on a
@@ -391,14 +440,16 @@ and delete the notice.
 
 ## Noticing mail
 
-New files in `mail/inbox/` are new mail. The carrier tells the agent when
-the inbox holds any, and when a followed topic has posts after the
-project's place (`2 new posts in #datadungeon`): when a session starts,
-and before it finishes a turn, so what arrived meanwhile is handled before
-the agent stops.
+New files in `mail/inbox/` are new mail. The agent is told when the inbox
+holds any, and when a followed topic has posts after the project's place
+(`2 new posts in #datadungeon`): when a session starts, and before it
+finishes a turn, so what arrived meanwhile is handled before the agent
+stops. Whatever runs the session tells it: the carrier's session hooks
+(`hook EVENT`), in a harness that can't do it itself (Claude Code, Codex),
+or the harness itself, where it reads its project's `.ai/` (T.O.M.).
 
 A message has been read once it's in the recipient's `received/`. The
-carrier tells the sender so, a **receipt** (`@oyl read
+sender is told so, a **receipt** (`@oyl read
 20261010-180322Z-@oyl--schema.md`, the name of the sender's copy under
 `sent/`), and also when a message left the inbox without being filed
 there. A receipt never keeps an agent going on its own: it's told when a
@@ -406,7 +457,51 @@ session starts, at the user's next prompt, or with something else the
 carrier has to tell before the agent stops. So no agent needs to look in
 another project's folders to see whether it read something. The carrier
 keeps the messages waiting for one in the sender's outbox (The carrier's
-files, below); posts get no receipts.
+files, below), and its `mail receipts` says which have come; posts get no
+receipts.
+
+**Pushing to idle sessions** is an extra a carrier may offer: telling a
+session that's waiting for its user, rather than at its next start or
+Stop (Claude Code's channels, `codex queue`). So is **waking** a project
+with no session open, by resuming its last session. Neither is required.
+
+**One runner per session.** The program that runs a session is the only
+one that tells it of mail, starts a turn in it, or resumes it: none tells,
+wakes or resumes a session another program holds open. Mail is told to
+one session per project, its newest open one, whoever runs it, so two
+sessions don't both answer it. Session records (below) are how programs
+see each other's sessions.
+
+## Session records
+
+An extra, for programs that run sessions: a record of each one, so the
+others can see which sessions are open and whether they're busy (One
+runner per session, above). A program that keeps them keeps them this
+way, so each can read the others'.
+
+- **Where:** per person, outside `.ai/`, since they're about this machine
+  only: `$XDG_STATE_HOME/dot-ai/sessions/` (`~/.local/state/dot-ai/sessions/`
+  where it's unset), whichever program writes them. They outlast a reboot
+  and the session's end.
+- **A file per session,** `<key>.session`, its key the harness's session
+  id with each character other than `A-Za-z0-9_.-` turned into `_`,
+  written under a hidden name and renamed into place.
+- **Lines** of `field=value`. Readers ignore fields they don't know.
+
+| Field | Holds |
+|---|---|
+| `root` | The project's directory, with symbolic links resolved |
+| `agent` | The harness: `claude`, `codex`, `copious`, … |
+| `id` | The harness's own id for the session, which resumes it |
+| `by` | The program that runs the session and writes the record: `dot-ai`, `aix`, `tom`, … |
+| `state` | `idle` (waiting for its user), `busy` (in a turn) or `ended` |
+
+- **A project's newest session** is the one whose record changed last
+  (the file's modification time).
+- **Only the writer changes a record.** A session that stopped without
+  saying so may be left `idle` or `busy`; a reader that can tell (a process
+  gone, a lock free) treats it as ended. A record ended a week ago may be
+  removed.
 
 ## The carrier's files
 
@@ -453,4 +548,6 @@ carrier's own reference, anything not starting with `/`; a carrier that
 can't check a line leaves it.
 
 **Checking the setting.** A carrier reads `ai.carrier` at the start of
-every run, each hook and each command, before it touches any of these.
+every run, each hook and each command, before it touches any of these:
+from the person's own config, warning if the repository's config sets it
+too (see [Config](config.md)).

@@ -13,8 +13,8 @@ keep it, committed: the sender under `.ai/mail/sent/`, the recipient under
 Neither folder is ever edited. Topics are logs anyone reads, not mail
 (Topics, below).
 
-Mail is carried by the machine's **carrier**, one per machine, chosen by
-git config's `ai.carrier` (`git config ai.carrier`): unset or `local` is
+Mail is carried by the machine's **carrier**, one per person on a machine, chosen by
+git config's `ai.carrier` (`git config --global ai.carrier`): unset or `local` is
 `dot-ai` itself (`scripts/dot-ai`, which this skill ships); `arcana` is
 Arcana (see `references/arcana.md`). Both keep to the same files and locks,
 so a change of carrier moves nothing. `dot-ai`'s commands are the same
