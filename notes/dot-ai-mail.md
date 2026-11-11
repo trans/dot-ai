@@ -1,6 +1,6 @@
 # dot-ai's mail commands (once dot-ai-mail)
 
-*Draft, 2026-10-14; updated 2026-10-30. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
+*Draft, 2026-10-14; updated 2026-11-11. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
 0.1.0; 0.2.0 (2026-10-17) adds `Re:` and `Id:`; 0.3.0 (2026-10-27) adds
 topics, `ai.carrier` and receipts; 0.3.1 (2026-10-29) leaves a message it
 can't write from a sandbox for the hooks, saying so. 0.5.0 (2026-10-30,
@@ -21,7 +21,13 @@ session). 0.8.0 (2026-11-04) delivers only to a project with an
 holding only `mail/` had been taking mail that no agent would read
 (@guestservices' note, vetted by @arcana); the skill adds "say how you
 know" and says no message is owed an answer, now that mail wakes agents.
-Tested by
+0.9.0 (2026-11-11) follows the spec's draft 0.4: `ai.carrier`, `ai.path`
+and `ai.runner` only from the person's own git config, warning of a
+repository that sets them; any carrier by name; `mail receipts`; session
+records in `$XDG_STATE_HOME/dot-ai/sessions/` with `by` and `pid`, ended
+rather than dropped; and delivery telling through each session's runner
+(`<by> tell <id>`), with `dot-ai tell` for its own (below, Telling an idle
+session). Tested by
 `tests/dot-ai.sh` (`just test`); its hooks ship in the dot-ai plugin
 (`hooks/hooks.json`).*
 
@@ -109,18 +115,33 @@ agent is fine: most mail the user approved at the sending end. Nothing
 polls (the user, 2026-11-03: "don't like polling"; 0.6.x checked every 2
 seconds).
 
-- **The record:** the hooks keep one for each session in the run
-  directory (`<key>.session`, beside the file of what it has been told
-  of): its project, agent, id, and state. A prompt makes it busy; a Stop
-  that lets the turn end, idle; a session's start, idle (busy if it
-  started from compacting, which may be mid-turn); its end drops it.
-  Interrupting a turn (Esc) skips Stop, so the session reads busy until
-  the next prompt, which tells of the mail anyway.
+- **The record** (the spec's Session records, since 0.9.0): the hooks
+  keep one for each session in `$XDG_STATE_HOME/dot-ai/sessions/`
+  (`<key>.session`): its project, agent, id, runner (`by`: `DOT_AI_BY`,
+  else `ai.runner`'s first, else `dot-ai`), Claude Code's process (`pid`,
+  the nearest `claude` within three processes above the hook), and
+  state. A prompt makes it busy; a Stop that lets the turn end, idle; a
+  session's start, idle (busy if it started from compacting, which may be
+  mid-turn); its end, ended. `by` and `pid` are found at the start and
+  kept. A session's start removes records ended, or whose `pid` is gone,
+  a week ago. Interrupting a turn (Esc) skips Stop, so the session reads
+  busy until the next prompt, which tells of the mail anyway. What a
+  session has been told of, and the channel's pipe, stay in the run
+  directory: they matter only while it runs. Before 0.9.0 the record was
+  there too, and dropped at the end.
 - **Delivery tells one session:** after a run, for each project mail
-  reached, `tell_session` takes the project's most recently active
-  session that can be told (a Claude Code one with its channel listening,
-  or a Codex one) and tells it if it's idle; otherwise no one, so two
-  sessions never both answer one message.
+  reached, `tell_session` takes the project's newest open record (not
+  ended, its `pid` there) whose runner the person allows (`ai.runner`'s,
+  and `dot-ai`) and runs `<by> tell <id>`, given up after 10 seconds:
+  0 or 4 stops there, 3 tries the next newest, anything else stops with
+  a `not told:` line (the mail went all the same, so `send` still
+  succeeds; the hooks pass the line on). So two sessions never both
+  answer one message.
+- **`dot-ai tell`**, for sessions whose runner is dot-ai: 3 if the record
+  is missing or not open (marking it ended), 0 if the session is busy (its
+  Stop tells it), and for an idle one the push below, 0, or 4 where it
+  can't push. The spec has the reference exit only 4 or 3; it keeps
+  pushing until aix, as a runner, does (2026-11-11).
 - **Claude Code** (`dot-ai channel`): an MCP server the plugin runs in
   every session, declaring Claude Code's `claude/channel` capability. It
   makes a pipe (`<key>.pipe`, its pid in `<key>.chan`) and waits on it;

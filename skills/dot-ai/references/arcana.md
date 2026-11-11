@@ -22,7 +22,7 @@ available (`arcana_directory`, `arcana_deliver`, …). In Claude Code they're
 - **Mail always goes through `dot-ai mail send`**, as the skill's Mail
   section says, whichever carrier the machine has: never `arcana_deliver` to a
   project's agent or `arcana_publish` to a topic. Where Arcana isn't the
-  carrier (`git config ai.carrier` unset or `local`), they refuse.
+  carrier (`git config --global ai.carrier` unset or `local`), they refuse.
 - **Mail left on the bus** (sent there before, or by a session that hadn't
   heard) is put into `.ai/mail/inbox/` by the hooks, with `Via: arcana`:
   process it like any other.

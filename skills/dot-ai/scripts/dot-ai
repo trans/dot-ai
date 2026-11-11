@@ -7,12 +7,12 @@
 # Where another program carries the machine's mail (git config ai.carrier),
 # the carrier's work is handed to it.
 #
-# Needs only POSIX sh and tools: find, sed, awk, date, mv, git (for ai.path
+# Needs only POSIX sh and tools: find, sed, awk, date, mv, ps, git (for ai.path
 # and ai.carrier), and sha256sum, shasum or openssl.
 
 LC_ALL=C
 export LC_ALL
-VERSION=0.8.0
+VERSION=0.9.0
 MAX_DEPTH=4 # how far below a search root a project may sit
 TAB=$(printf '\t')
 
@@ -39,6 +39,8 @@ dot-ai: a project's .ai/ (its notes, its mail, the machine's topics)
   dot-ai mail read TOPIC [--after N] [DIR]
                                the posts after this project's place in TOPIC,
                                or after post N, and move the place on
+  dot-ai mail receipts [DIR]   the mail this project sent that has been read
+                               since last asked, a line each (@oyl read NAME)
   dot-ai mail find [ADDRESS]   where ADDRESS's project is, or every project found
   dot-ai init [HANDLE] [DIR]   set up .ai/ in the git checkout at or above DIR:
                                the ai branch as its worktree, the config (HANDLE,
@@ -56,6 +58,9 @@ dot-ai: a project's .ai/ (its notes, its mail, the machine's topics)
   dot-ai channel               an MCP server for Claude Code's channels, through
                                which delivery tells an idle session its mail
                                has come (the plugin runs it)
+  dot-ai tell ID               tell session ID, whose runner is dot-ai, that
+                               mail has come: exits 0 (told, or will be at its
+                               turn's end), 3 (not open) or 4 (can't push)
   dot-ai version
 
 The project is the one at or above DIR (by default, here). NAME is a
@@ -105,26 +110,57 @@ self_path() {
   esac
 }
 
-# The machine's carrier, git config's ai.carrier (spec/mail.md: The
-# carrier). dot-ai is `local`, the default.
+# The settings that are a person's, not a project's (spec/config.md)
+PERSON_KEYS='ai.carrier ai.path ai.runner'
+
+# A per-person setting KEY's values, a line each: from the person's own git
+# config (--global, which takes in $XDG_CONFIG_HOME/git/config), else the
+# system's, never a repository's, which a plain `git config --get` would let
+# win. Given --path, with ~ expanded.
+person_config() { # KEY [--path]
+  pk=$1 pt=
+  [ "${2:-}" = --path ] && pt=--type=path
+  pv=$(git config --global $pt --get-all "$pk" 2>/dev/null)
+  [ -n "$pv" ] || pv=$(git config --system $pt --get-all "$pk" 2>/dev/null)
+  [ -z "$pv" ] || printf '%s\n' "$pv"
+}
+
+# What a repository at or above DIR sets of the per-person keys, which is
+# ignored: a warning line for each
+repo_settings() { # DIR
+  rtop=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || return 0
+  for k in $PERSON_KEYS; do
+    git -C "$1" config --local --get-all "$k" >/dev/null 2>&1 &&
+      printf '%s sets %s in its own git config, which is ignored: it'\''s per person (git config --global %s)\n' \
+        "$rtop" "$k" "$k"
+  done
+}
+
+# Whether NAME is a carrier's or a runner's name: lowercase letters,
+# digits and hyphens, never a path or a command line
+name_ok() {
+  case $1 in '' | *[!a-z0-9-]*) return 1 ;; esac
+}
+
+# The person's carrier, ai.carrier (spec/mail.md: The carrier). dot-ai is
+# `local`, the reference and the default.
 carrier() {
-  c=$(git config --get ai.carrier 2>/dev/null)
+  c=$(person_config ai.carrier | tail -n 1)
   printf '%s\n' "${c:-local}"
 }
 # Under another carrier, hands it the carrier's work, mail command CMD with
-# its arguments (`arcana mail CMD ...` for arcana); returns where dot-ai is
+# its arguments (`X mail CMD ...` for carrier X); returns where dot-ai is
 # the carrier
 hand_off() {
   c=$(carrier)
   case $c in
     local) return 0 ;;
-    arcana)
-      command -v arcana >/dev/null 2>&1 ||
-        die "this machine's carrier is arcana (git config ai.carrier), but there's no arcana command"
-      exec arcana mail "$@"
-      ;;
-    *) die "this machine's carrier is $c (git config ai.carrier), which dot-ai can't hand mail to" ;;
+    dot-ai) die "ai.carrier is dot-ai: the reference carrier's name is local" ;;
   esac
+  name_ok "$c" || die "ai.carrier is $c, which isn't a carrier's name (lowercase letters, digits and -)"
+  command -v "$c" >/dev/null 2>&1 ||
+    die "this person's carrier is $c (git config ai.carrier), but there's no $c command"
+  exec "$c" mail "$@"
 }
 
 # -- Projects and addresses ---------------------------------------------------
@@ -177,7 +213,7 @@ handle_of() {
 # Where to look for projects: ai.path, else the outermost project enclosing
 # DIR's project, else that project's parent directory
 search_roots() {
-  roots=$(git config --get-all --type=path ai.path 2>/dev/null)
+  roots=$(person_config ai.path --path)
   if [ -n "$roots" ]; then
     printf '%s\n' "$roots"
     return
@@ -245,7 +281,7 @@ topic_ok() {
 # first ai.path directory, else the outermost project at or above ROOT.
 # Prints it, or why there's none.
 topic_home() {
-  first=$(git config --get-all --type=path ai.path 2>/dev/null | head -n 1)
+  first=$(person_config ai.path --path | head -n 1)
   if [ -n "$first" ]; then
     if ! d=$(cd "$first" 2>/dev/null && pwd -P); then
       printf 'ai.path: no such directory: %s\n' "$first"
@@ -608,6 +644,12 @@ receipts() {
   LOCK=
 }
 
+cmd_receipts() {
+  hand_off receipts "$@"
+  root=$(project_root "${1:-.}") || die "no .ai/ at or above ${1:-.}"
+  receipts "$root" | sed 's/^  //'
+}
+
 # The inbox of the project at ROOT, oldest first
 inbox_list() {
   [ -d "$1/.ai/mail/inbox" ] && ls -1 "$1/.ai/mail/inbox" 2>/dev/null
@@ -948,65 +990,156 @@ count() {
 }
 
 # Where the hooks keep, for each session, what it has been told of (a
-# file named by its key) and its record (KEY.session), and where a Claude
-# Code session's mail channel keeps its pipe (KEY.pipe) and process id
-# (KEY.chan)
+# file named by its key), and where a Claude Code session's mail channel
+# keeps its pipe (KEY.pipe) and process id (KEY.chan): this boot's only
 run_dir() { printf '%s/dot-ai\n' "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"; }
+# Where every runner keeps its sessions' records (spec/mail.md: Session
+# records), the person's own: they outlast a reboot and the session
+state_dir() { printf '%s/dot-ai/sessions\n' "${XDG_STATE_HOME:-$HOME/.local/state}"; }
 # A session's id as those files' name
 session_key() { printf '%s' "$1" | tr -c 'A-Za-z0-9_.-' '_'; }
 
-# A session's record, kept by the hooks so delivery can tell an idle
-# session its mail has come: its project's root, its agent (claude or
-# codex), its id, and its state, busy (from a prompt to a Stop that lets
-# it end its turn) or idle
+# A session's record (spec/mail.md: Session records): its project's root,
+# its agent (claude or codex), its id, its runner (by), the harness's
+# process where there is one (pid), and its state: busy (from a prompt to
+# a Stop that lets it end its turn), idle, or ended
 rec_get() { sed -n "s/^$2=//p" "$1" 2>/dev/null | head -n 1; }
-rec_write() { # FILE ROOT AGENT ID STATE
-  printf 'root=%s\nagent=%s\nid=%s\nstate=%s\n' "$2" "$3" "$4" "$5" >"$1.$$" && mv "$1.$$" "$1"
+rec_write() { # FILE ROOT AGENT ID BY PID STATE
+  rtmp=$(dirname "$1")/.$(basename "$1").$$
+  {
+    printf 'root=%s\nagent=%s\nid=%s\nby=%s\n' "$2" "$3" "$4" "$5"
+    [ -z "$6" ] || printf 'pid=%s\n' "$6"
+    printf 'state=%s\n' "$7"
+  } >"$rtmp" && mv "$rtmp" "$1"
 }
 rec_state() { # FILE STATE, for a record that exists
   [ -f "$1" ] || return 0
-  sed "s/^state=.*/state=$2/" "$1" >"$1.$$" && mv "$1.$$" "$1"
+  rtmp=$(dirname "$1")/.$(basename "$1").$$
+  sed "s/^state=.*/state=$2/" "$1" >"$rtmp" && mv "$rtmp" "$1"
+}
+# Whether the record FILE is of a session still open: not ended, and its
+# harness's process, where it names one, still there
+rec_open() {
+  [ "$(rec_get "$1" state)" != ended ] || return 1
+  rp=$(rec_get "$1" pid)
+  [ -z "$rp" ] || kill -0 "$rp" 2>/dev/null
+}
+
+# The runner a session the hooks record has (spec/mail.md: Runners): the
+# program that started it, by DOT_AI_BY; else the person's default
+# runner, ai.runner's first value; else dot-ai, the hooks' own carrier
+rec_by() {
+  if name_ok "${DOT_AI_BY:-}"; then printf '%s\n' "$DOT_AI_BY" && return; fi
+  rr=$(person_config ai.runner | head -n 1)
+  if name_ok "$rr"; then printf '%s\n' "$rr"; else printf 'dot-ai\n'; fi
+}
+# The runners delivery may run to tell a session: ai.runner's, and dot-ai
+runners_allowed() {
+  person_config ai.runner
+  printf 'dot-ai\n'
+}
+# The harness's process, for AGENT claude: the nearest process above this
+# one, within three, that is Claude Code's (a hook runs under a shell it
+# starts). Codex runs hooks from its app-server, which outlives its
+# sessions, so none.
+harness_pid() {
+  [ "$1" = claude ] || return 0
+  hp=$PPID hn=0
+  while [ "$hn" -lt 3 ] && [ "${hp:-1}" -gt 1 ]; do
+    ha=$(ps -o args= -p "$hp" 2>/dev/null) || return 0
+    case ${ha%% *} in claude | */claude) printf '%s\n' "$hp" && return 0 ;; esac
+    hp=$(ps -o ppid= -p "$hp" 2>/dev/null | tr -d ' ')
+    hn=$((hn + 1))
+  done
 }
 
 # What a session is told when mail comes while it's idle
 NOTICE='You have mail in .ai/mail/inbox/.'
 
-# Tells the project at DIR, whose inbox mail has just reached, if its most
-# recently active session that can be told is idle: a Claude Code session
-# started with this plugin's channel, through the channel's pipe (the
-# channel pushes the notice), or a Codex session, by queueing the notice
-# with `codex queue`, which starts its turn. Only one, so two sessions
-# don't both answer the mail; a busy one hears of it at Stop, from the
-# hooks. A Codex session counts as busy once told, until its Stop.
+# Tells the project at DIR, whose inbox mail has just reached: its newest
+# open session (the record changed last), through its runner, `<by> tell
+# <id>` (spec/mail.md: Runners), so two sessions don't both answer the
+# mail. Status 0: told, or will be at the end of its turn; 3: not open,
+# so the next newest; 4: can't push, so the session hears at its next
+# start or Stop, from the hooks. Only runners the person allows are run;
+# a record naming any other is left alone. A runner that fails is named
+# in a "not told:" line: the mail was delivered all the same.
 tell_session() {
   tdir=$(cd "$1" 2>/dev/null && pwd -P) || return 0
-  trun=$(run_dir)
-  ls -t "$trun" 2>/dev/null | grep '\.session$' | while IFS= read -r tf; do
-    trec=$trun/$tf tkey=${tf%.session}
+  tsd=$(state_dir)
+  [ -d "$tsd" ] || return 0
+  tok=$(runners_allowed)
+  ls -t "$tsd" 2>/dev/null | grep '^[^.].*\.session$' | while IFS= read -r tf; do
+    trec=$tsd/$tf
     [ "$(rec_get "$trec" root)" = "$tdir" ] || continue
-    case $(rec_get "$trec" agent) in
-      claude)
-        tpid=$(cat "$trun/$tkey.chan" 2>/dev/null) || continue
-        kill -0 "$tpid" 2>/dev/null && [ -p "$trun/$tkey.pipe" ] || continue
-        [ "$(rec_get "$trec" state)" = idle ] || break
-        # In the background, and given up after a few seconds, so a
-        # channel that stopped reading can't hold delivery up
-        (printf 'mail\n' >"$trun/$tkey.pipe") >/dev/null 2>&1 </dev/null &
-        tw=$!
-        (sleep 5 && kill "$tw") >/dev/null 2>&1 </dev/null &
-        ;;
-      codex)
-        command -v codex >/dev/null 2>&1 || continue
-        tid=$(rec_get "$trec" id)
-        [ -n "$tid" ] || continue
-        [ "$(rec_get "$trec" state)" = idle ] || break
-        rec_state "$trec" busy
-        (codex queue --thread "$tid" --message "$NOTICE") >/dev/null 2>&1 </dev/null &
-        ;;
-      *) continue ;;
+    rec_open "$trec" || continue
+    tby=$(rec_get "$trec" by) tid=$(rec_get "$trec" id)
+    [ -n "$tid" ] && name_ok "$tby" && printf '%s\n' "$tok" | grep -qxF "$tby" || continue
+    if [ "$tby" = dot-ai ]; then
+      tell_own "$tid"
+      tst=$?
+    elif command -v "$tby" >/dev/null 2>&1; then
+      # Given up after a few seconds, so a runner that hangs can't hold
+      # delivery up
+      "$tby" tell "$tid" </dev/null >/dev/null 2>&1 &
+      tw=$!
+      (sleep 10 && kill "$tw") >/dev/null 2>&1 </dev/null &
+      tk=$!
+      wait "$tw"
+      tst=$?
+      kill "$tk" 2>/dev/null
+    else
+      tst=127
+    fi
+    case $tst in
+      3) continue ;;
+      0 | 4) ;;
+      *) printf 'not told: %s'\''s newest session, since %s tell %s exited %s\n' "$tdir" "$tby" "$tid" "$tst" ;;
     esac
     break
   done
+}
+
+# dot-ai's own `tell`, for a session whose runner is dot-ai: pushes the
+# notice where it can, to an idle Claude Code session started with this
+# plugin's channel, through the channel's pipe (the channel pushes it), or
+# to an idle Codex session, by queueing it with `codex queue`, which starts
+# its turn; a Codex session counts as busy once told, until its Stop. The
+# statuses are tell_session's. Until aix, as a runner, pushes (2026-11-11),
+# the reference keeps pushing; then its `tell` only says it can't (4).
+tell_own() { # ID
+  okey=$(session_key "$1")
+  orec=$(state_dir)/$okey.session orun=$(run_dir)
+  [ -f "$orec" ] || return 3
+  if ! rec_open "$orec"; then
+    rec_state "$orec" ended
+    return 3
+  fi
+  [ "$(rec_get "$orec" state)" = idle ] || return 0 # its Stop tells it
+  case $(rec_get "$orec" agent) in
+    claude)
+      opid=$(cat "$orun/$okey.chan" 2>/dev/null) || return 4
+      kill -0 "$opid" 2>/dev/null && [ -p "$orun/$okey.pipe" ] || return 4
+      # In the background, and given up after a few seconds, so a
+      # channel that stopped reading can't hold delivery up
+      (printf 'mail\n' >"$orun/$okey.pipe") >/dev/null 2>&1 </dev/null &
+      ow=$!
+      (sleep 5 && kill "$ow") >/dev/null 2>&1 </dev/null &
+      return 0
+      ;;
+    codex)
+      command -v codex >/dev/null 2>&1 || return 4
+      rec_state "$orec" busy
+      (codex queue --thread "$1" --message "$NOTICE") >/dev/null 2>&1 </dev/null &
+      return 0
+      ;;
+  esac
+  return 4
+}
+
+cmd_tell() {
+  [ $# -eq 1 ] || die "usage: dot-ai tell ID"
+  tell_own "$1"
 }
 
 cmd_hook() {
@@ -1041,7 +1174,7 @@ cmd_hook() {
   rec=
   # A Stop with nothing to say lets the turn end: the session is idle
   quiet() {
-    [ "$event" = stop ] && [ -n "$rec" ] && rec_write "$rec" "$root" "$agent" "$sid" idle
+    [ "$event" = stop ] && [ -n "$rec" ] && rec_put idle
     [ "$agent" = codex ] && case $event in stop | prompt) printf '{}\n' ;; esac
     exit 0
   }
@@ -1069,19 +1202,30 @@ cmd_hook() {
 
   # The session's record: busy from a prompt, idle from a session's start
   # (busy if it started from compacting, which may be mid-turn) and from a
-  # Stop that lets the turn end (quiet, above); dropped at its end
+  # Stop that lets the turn end (quiet, above), ended at its end. Its
+  # runner and harness's process are found at its start and kept.
   rundir=$(run_dir)
   mkdir -p "$rundir" 2>/dev/null && chmod 700 "$rundir" 2>/dev/null
-  if [ -n "$session" ] && [ -d "$rundir" ]; then
-    rec=$rundir/$session.session
+  sdir=$(state_dir)
+  mkdir -p "$sdir" 2>/dev/null && chmod 700 "$sdir" 2>/dev/null
+  rec_put() { # STATE
+    if [ "$event" != session-start ] && [ -f "$rec" ]; then
+      by=$(rec_get "$rec" by) hpid=$(rec_get "$rec" pid)
+    else
+      by=$(rec_by) hpid=$(harness_pid "$agent")
+    fi
+    rec_write "$rec" "$root" "$agent" "$sid" "$by" "$hpid" "$1"
+  }
+  if [ -n "$session" ] && [ -d "$sdir" ]; then
+    rec=$sdir/$session.session
     case $event in
-      prompt) rec_write "$rec" "$root" "$agent" "$sid" busy ;;
+      prompt) rec_put busy ;;
       session-start)
         st=idle
         [ "$(json_field source)" = compact ] && st=busy
-        rec_write "$rec" "$root" "$agent" "$sid" "$st"
+        rec_put "$st"
         ;;
-      session-end) rm -f "$rec" && rec= ;;
+      session-end) rec_state "$rec" ended && rec= ;;
     esac
   fi
 
@@ -1106,6 +1250,10 @@ cmd_hook() {
       [ -f "$c" ] || continue
       kill -0 "$(cat "$c")" 2>/dev/null || rm -f "$c" "${c%.chan}.pipe"
     done
+    # Records of sessions ended a week ago, or whose harness went then
+    find "$sdir" -name '*.session' -mtime +7 2>/dev/null | while IFS= read -r r; do
+      rec_open "$r" || rm -f "$r"
+    done
   fi
 
   # At session start, everything; at Stop, only what this session hasn't heard
@@ -1119,9 +1267,14 @@ cmd_hook() {
     printf 'dot-ai sent %s from the outbox and filed %s under .ai/mail/sent/: commit %s.\n' \
       "$(count "$sent" message)" "$them" "$them" >>"$TMP/say"
   fi
-  grep -e '^error: ' -e '^left in the outbox: ' "$TMP/out" | while IFS= read -r line; do
+  grep -e '^error: ' -e '^left in the outbox: ' -e '^not told: ' "$TMP/out" | while IFS= read -r line; do
     untold "out:$line" || continue
     printf 'out:%s\n' "$line" >>"$told"
+    printf 'dot-ai: %s\n' "$line" >>"$TMP/say"
+  done
+  repo_settings "$root" | while IFS= read -r line; do
+    untold "repo:$line" || continue
+    printf 'repo:%s\n' "$line" >>"$told"
     printf 'dot-ai: %s\n' "$line" >>"$TMP/say"
   done
   inbox_list "$root" | while IFS= read -r name; do
@@ -1178,7 +1331,7 @@ cmd_hook() {
   if [ ! -s "$TMP/say" ]; then quiet; fi
   [ "$event" = session-start ] && context SessionStart
   # A Stop that keeps the agent going: it's still busy
-  [ -n "$rec" ] && rec_write "$rec" "$root" "$agent" "$sid" busy
+  [ -n "$rec" ] && rec_put busy
   if [ "$agent" = codex ]; then
     printf '{"decision":"block","reason":%s}\n' "$(json_str <"$TMP/say")"
     exit 0
@@ -1288,7 +1441,7 @@ cmd_channel() {
       CHAN_PIPE=$rundir/$key.pipe CHAN_PID=$rundir/$key.chan
       rm -f "$CHAN_PIPE"
       if mkfifo -m 600 "$CHAN_PIPE" 2>/dev/null && printf '%s\n' "$$" >"$CHAN_PID"; then
-        channel_wait "$root" "$CHAN_PIPE" "$rundir/$key.session" "$rundir/$key" &
+        channel_wait "$root" "$CHAN_PIPE" "$(state_dir)/$key.session" "$rundir/$key" &
         WATCHER=$!
       fi
     fi
@@ -1403,7 +1556,7 @@ cmd_init() {
     heed "couldn't commit .ai/: commit it there"
   fi
   # Mail finds projects under ai.path
-  roots=$(git config --get-all --type=path ai.path 2>/dev/null)
+  roots=$(person_config ai.path --path)
   if [ -n "$roots" ]; then
     under=
     for r in $roots; do
@@ -1484,6 +1637,7 @@ EOF
 cmd_mail() {
   sub=${1:-}
   [ $# -eq 0 ] || shift
+  repo_settings . | while IFS= read -r l; do warn "$l"; done
   case $sub in
     send) cmd_send "$@" ;;
     draft) cmd_draft "$@" ;;
@@ -1493,6 +1647,7 @@ cmd_mail() {
     deliver) cmd_deliver "$@" ;;
     topic) cmd_topic "$@" ;;
     read) cmd_read "$@" ;;
+    receipts) cmd_receipts "$@" ;;
     find) cmd_find "$@" ;;
     help | -h | --help | '') usage ;;
     *)
@@ -1508,6 +1663,7 @@ case ${1:-} in
   install) shift && cmd_install "$@" ;;
   hook) shift && cmd_hook "$@" ;;
   hooks) cmd_hooks ;;
+  tell) shift && cmd_tell "$@" ;;
   channel) cmd_channel ;;
   version | --version) printf 'dot-ai %s\n' "$VERSION" ;;
   help | -h | --help | '') usage ;;
