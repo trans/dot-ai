@@ -527,7 +527,10 @@ sessions.
   instead of at its next start or Stop, as with Claude Code's channels or
   `codex queue`, and **waking** a project with no session open, by
   resuming its last session, are a runner's to offer. Neither is
-  required.
+  required. `codex queue` goes through the shared app server, so it may
+  not reach a session started with `--no-daemon`; a runner pushes to one
+  of those its own way (aix types into its pane once the record says
+  it's idle).
 
 ## Session records
 
