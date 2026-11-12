@@ -12,7 +12,7 @@
 
 LC_ALL=C
 export LC_ALL
-VERSION=0.9.0
+VERSION=0.10.0
 MAX_DEPTH=4 # how far below a search root a project may sit
 TAB=$(printf '\t')
 
@@ -111,7 +111,7 @@ self_path() {
 }
 
 # The settings that are a person's, not a project's (spec/config.md)
-PERSON_KEYS='ai.carrier ai.path ai.runner'
+PERSON_KEYS='ai.carrier ai.path'
 
 # A per-person setting KEY's values, a line each: from the person's own git
 # config (--global, which takes in $XDG_CONFIG_HOME/git/config), else the
@@ -1026,28 +1026,54 @@ rec_open() {
 }
 
 # The runner a session the hooks record has (spec/mail.md: Runners): the
-# program that started it, by DOT_AI_BY; else the person's default
-# runner, ai.runner's first value; else dot-ai, the hooks' own carrier
+# program that started it, by DOT_AI_BY; else dot-ai, the hooks' own
+# carrier. There's no default runner (Draft 0.5, agreed 2026-11-12).
 rec_by() {
-  if name_ok "${DOT_AI_BY:-}"; then printf '%s\n' "$DOT_AI_BY" && return; fi
-  rr=$(person_config ai.runner | head -n 1)
-  if name_ok "$rr"; then printf '%s\n' "$rr"; else printf 'dot-ai\n'; fi
+  if name_ok "${DOT_AI_BY:-}"; then printf '%s\n' "$DOT_AI_BY"; else printf 'dot-ai\n'; fi
 }
-# The runners delivery may run to tell a session: ai.runner's, and dot-ai
-runners_allowed() {
-  person_config ai.runner
-  printf 'dot-ai\n'
+
+# Where runners register (Draft 0.5): runners/NAME beside sessions/, a
+# line holding the runner's program's absolute path, written by the runner
+# each time it starts a session
+runners_dir() { printf '%s/dot-ai/runners\n' "${XDG_STATE_HOME:-$HOME/.local/state}"; }
+# Whether F, a file (f) or a directory (d), is the person's and no one
+# else can write it. Given prog, F is a program: it may be root's, and a
+# link is checked at what it leads to.
+mine_only() { # f|d F [prog]
+  fo="-user $(id -u)" fl=-P
+  if [ "${3:-}" = prog ]; then fo="( -user $(id -u) -o -user 0 )" fl=-L; fi
+  # shellcheck disable=SC2086
+  [ -n "$(find $fl "$2" -prune -type "$1" $fo ! -perm -020 ! -perm -002 2>/dev/null)" ]
 }
-# The harness's process, for AGENT claude: the nearest process above this
-# one, within three, that is Claude Code's (a hook runs under a shell it
-# starts). Codex runs hooks from its app-server, which outlives its
-# sessions, so none.
-harness_pid() {
-  [ "$1" = claude ] || return 0
+# The program of the runner NAME, as it registered it; nothing where it
+# hasn't, or where its registration or its program fails the checks: an
+# absolute path, executable, and both writable by the person alone
+runner_path() { # NAME
+  name_ok "$1" || return 1
+  rd=$(runners_dir)
+  mine_only d "$rd" && mine_only f "$rd/$1" || return 1
+  rp=$(head -n 1 "$rd/$1")
+  case $rp in /*) ;; *) return 1 ;; esac
+  [ -x "$rp" ] && mine_only f "$rp" prog || return 1
+  printf '%s\n' "$rp"
+}
+# The harness's process, for AGENT claude or codex: the nearest process
+# above this one, within three, that is the harness's (a hook runs under a
+# shell it starts). For Codex, only under `codex --no-daemon`, whose TUI
+# runs its app server itself; a hook its daemon runs (`codex app-server`,
+# which outlives its sessions) gets none.
+harness_pid() { # AGENT
+  case $1 in claude | codex) ;; *) return 0 ;; esac
   hp=$PPID hn=0
   while [ "$hn" -lt 3 ] && [ "${hp:-1}" -gt 1 ]; do
     ha=$(ps -o args= -p "$hp" 2>/dev/null) || return 0
-    case ${ha%% *} in claude | */claude) printf '%s\n' "$hp" && return 0 ;; esac
+    case ${ha%% *} in
+      "$1" | */"$1")
+        case " $ha " in *" app-server "*) return 0 ;; esac
+        printf '%s\n' "$hp"
+        return 0
+        ;;
+    esac
     hp=$(ps -o ppid= -p "$hp" 2>/dev/null | tr -d ' ')
     hn=$((hn + 1))
   done
@@ -1061,27 +1087,30 @@ NOTICE='You have mail in .ai/mail/inbox/.'
 # <id>` (spec/mail.md: Runners), so two sessions don't both answer the
 # mail. Status 0: told, or will be at the end of its turn; 3: not open,
 # so the next newest; 4: can't push, so the session hears at its next
-# start or Stop, from the hooks. Only runners the person allows are run;
-# a record naming any other is left alone. A runner that fails is named
-# in a "not told:" line: the mail was delivered all the same.
+# start or Stop, from the hooks. dot-ai's own sessions it tells itself;
+# others', through the program their runner registered (runner_path). A
+# record naming a runner that hasn't registered, or whose registration
+# fails the checks, is left alone, as if it answered 4: its session has
+# hooks, so it hears at its Stop, and telling an older one as well would
+# have two answer. A runner that fails is named in a "not told:" line:
+# the mail was delivered all the same.
 tell_session() {
   tdir=$(cd "$1" 2>/dev/null && pwd -P) || return 0
   tsd=$(state_dir)
   [ -d "$tsd" ] || return 0
-  tok=$(runners_allowed)
   ls -t "$tsd" 2>/dev/null | grep '^[^.].*\.session$' | while IFS= read -r tf; do
     trec=$tsd/$tf
     [ "$(rec_get "$trec" root)" = "$tdir" ] || continue
     rec_open "$trec" || continue
     tby=$(rec_get "$trec" by) tid=$(rec_get "$trec" id)
-    [ -n "$tid" ] && name_ok "$tby" && printf '%s\n' "$tok" | grep -qxF "$tby" || continue
+    [ -n "$tid" ] || continue
     if [ "$tby" = dot-ai ]; then
       tell_own "$tid"
       tst=$?
-    elif command -v "$tby" >/dev/null 2>&1; then
+    elif tprog=$(runner_path "$tby"); then
       # Given up after a few seconds, so a runner that hangs can't hold
       # delivery up
-      "$tby" tell "$tid" </dev/null >/dev/null 2>&1 &
+      "$tprog" tell "$tid" </dev/null >/dev/null 2>&1 &
       tw=$!
       (sleep 10 && kill "$tw") >/dev/null 2>&1 </dev/null &
       tk=$!
@@ -1089,7 +1118,7 @@ tell_session() {
       tst=$?
       kill "$tk" 2>/dev/null
     else
-      tst=127
+      tst=4
     fi
     case $tst in
       3) continue ;;

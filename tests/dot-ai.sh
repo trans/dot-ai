@@ -30,10 +30,12 @@ if [ "$CARRIER" = arcana ]; then
   carry_hook() { "$ARCANA" hook "$@"; }
   git config --file "$T/gitconfig" ai.carrier arcana
   VIA=arcana OTHER=local
+  OWN=arcana HOOKER=$ARCANA # its own name as a runner; what runs its hooks
 else
   carry() { $SH "$M" mail "$@"; }
   carry_hook() { $SH "$M" hook "$@"; }
   VIA=local OTHER=arcana
+  OWN=dot-ai HOOKER="$SH $M"
 fi
 # A stand-in for Codex's codex, so no test reaches a real Codex: it notes
 # how it was called
@@ -289,13 +291,11 @@ hook stop r2 "$P/rho" claude 2>"$T/err"
 check "stop: told with something else to say" '[ $? -eq 2 ] && grep -q "sent 1 message" "$T/err" && grep -q "@sigma read 20261016-100200Z-@sigma--three.md" "$T/err" && ! grep -q -- "--three.md$" "$R/outbox/.receipts"'
 mv "$S/inbox/"*--four-*.md "$S/received/"
 check "session-start: tells of receipts" 'hook session-start r3 "$P/rho" claude | grep -q "@sigma read 20261016-100400Z-@sigma--four.md" && [ ! -e "$R/outbox/.receipts" ]'
-if [ "$CARRIER" = local ]; then
-  printf 'Five.\n' >"$R/outbox/20261016-100500Z-@sigma--five.md"
-  (cd "$P/rho" && carry deliver >/dev/null)
-  check "receipts: mail receipts, none yet" '[ -z "$(cd "$P/rho" && carry receipts)" ]'
-  mv "$S/inbox/"*--five-*.md "$S/received/"
-  check "receipts: mail receipts, a line each, then none" '[ "$(cd "$P/rho" && carry receipts)" = "@sigma read 20261016-100500Z-@sigma--five.md" ] && [ -z "$(cd "$P/rho" && carry receipts)" ]'
-fi
+printf 'Five.\n' >"$R/outbox/20261016-100500Z-@sigma--five.md"
+(cd "$P/rho" && carry deliver >/dev/null)
+check "receipts: mail receipts, none yet" '[ -z "$(cd "$P/rho" && carry receipts)" ]'
+mv "$S/inbox/"*--five-*.md "$S/received/"
+check "receipts: mail receipts, a line each, then none" '[ "$(cd "$P/rho" && carry receipts)" = "@sigma read 20261016-100500Z-@sigma--five.md" ] && [ -z "$(cd "$P/rho" && carry receipts)" ]'
 
 # Setting up: init and install (dot-ai's own, under either carrier)
 top() { $SH "$M" "$@"; }
@@ -344,44 +344,53 @@ check "channel: initialize, with the channel's capability" 'printf "%s\n" "$out"
 check "channel: the top-level id, not a nested one" 'printf "%s\n" "$out" | grep -qxF "{\"jsonrpc\":\"2.0\",\"id\":\"p-1\",\"error\":{\"code\":-32601,\"message\":\"no such method\"}}"'
 check "channel: ping; no answer to a notification or a response" 'printf "%s\n" "$out" | grep -qxF "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}" && [ "$(printf "%s\n" "$out" | wc -l | tr -d " ")" = 3 ]'
 
+# Session records, kept by the hooks (both carriers)
+R=$T/run/dot-ai SD=$T/state/dot-ai/sessions
+rm -f "$SD"/*.session # the sessions of the tests above
+send() { (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "$1") >/dev/null; }
+pushes() { grep -c '"method":"notifications/claude/channel"' "$T/chan.out"; }
+within() { i=0; while [ $i -lt 8 ]; do eval "$1" && return 0; sleep 1; i=$((i + 1)); done; return 1; }
+state() { sed -n 's/^state=//p' "$SD/$1.session" 2>/dev/null; }
+field() { sed -n "s/^$2=//p" "$SD/$1.session" 2>/dev/null; }
+
+# The hooks keep each session's record
+hook session-start s-chan "$P/alpha" claude >/dev/null 2>&1
+check "record: a session's start makes it, idle" '[ "$(state s-chan)" = idle ] && [ "$(field s-chan root)" = "$(cd "$P/alpha" && pwd -P)" ] && [ "$(field s-chan agent)" = claude ] && [ "$(field s-chan id)" = s-chan ]'
+check "record: in the person's state directory, private to them" '[ "$(ls -ld "$SD" | cut -c1-10)" = drwx------ ]'
+check "record: its runner, without DOT_AI_BY, the carrier itself" '[ "$(field s-chan by)" = "$OWN" ]'
+hook prompt s-chan "$P/alpha" claude >/dev/null 2>&1
+check "record: a prompt makes it busy" '[ "$(state s-chan)" = busy ]'
+hook stop s-chan "$P/alpha" claude >/dev/null 2>&1
+check "record: a Stop that lets the turn end makes it idle" '[ "$(state s-chan)" = idle ]'
+printf '{"session_id":"s-cmp","cwd":"%s","source":"compact"}' "$P/alpha" | carry_hook session-start --agent claude >/dev/null 2>&1
+check "record: a start from compacting, maybe mid-turn, is busy" '[ "$(state s-cmp)" = busy ]'
+hook session-end s-cmp "$P/alpha" claude >/dev/null 2>&1
+check "record: a session's end marks it ended" '[ "$(state s-cmp)" = ended ]'
+(DOT_AI_BY=aix && export DOT_AI_BY && hook session-start s-by "$P/alpha" claude >/dev/null 2>&1)
+check "record: its runner, DOT_AI_BY" '[ "$(field s-by by)" = aix ]'
+hook prompt s-by "$P/alpha" claude >/dev/null 2>&1
+check "record: its runner, kept from its start" '[ "$(field s-by by)" = aix ] && [ "$(state s-by)" = busy ]'
+git config --file "$T/gitconfig" ai.runner tom # no longer read
+(DOT_AI_BY='../bin/x' && export DOT_AI_BY && hook session-start s-run "$P/alpha" codex >/dev/null 2>&1)
+check "record: its runner, never a path, and no default: the carrier" '[ "$(field s-run by)" = "$OWN" ] && [ -z "$(field s-run pid)" ]'
+git config --file "$T/gitconfig" --unset-all ai.runner
+# Claude Code's process, as the record's pid: a shell named claude
+cp "$(command -v sh)" "$T/fake/claude"
+printf '{"session_id":"s-pid","cwd":"%s"}' "$P/alpha" >"$T/pid.json"
+"$T/fake/claude" -c 'printf "%s\n" "$$" >"$1/pid"; $2 hook session-start --agent claude <"$1/pid.json" >/dev/null 2>&1; :' claude "$T" "$HOOKER"
+check "record: Claude Code's process, as pid" '[ -n "$(field s-pid pid)" ] && [ "$(field s-pid pid)" = "$(cat "$T/pid")" ]'
+# Codex's, under --no-daemon, where its TUI runs the hooks; none under its
+# daemon, `codex app-server`, which outlives its sessions
+mkdir -p "$T/pidbin" && cp "$(command -v sh)" "$T/pidbin/codex"
+printf '{"session_id":"s-cpid","cwd":"%s"}' "$P/alpha" >"$T/pid.json"
+"$T/pidbin/codex" -c 'printf "%s\n" "$$" >"$1/pid"; $2 hook session-start --agent codex <"$1/pid.json" >/dev/null 2>&1; :' codex "$T" "$HOOKER"
+check "record: Codex's process, as pid, under --no-daemon" '[ -n "$(field s-cpid pid)" ] && [ "$(field s-cpid pid)" = "$(cat "$T/pid")" ]'
+printf '{"session_id":"s-dpid","cwd":"%s"}' "$P/alpha" >"$T/pid.json"
+"$T/pidbin/codex" -c '$2 hook session-start --agent codex <"$1/pid.json" >/dev/null 2>&1; :' app-server "$T" "$HOOKER"
+check "record: none under Codex's daemon" '[ "$(state s-dpid)" = idle ] && [ -z "$(field s-dpid pid)" ]'
+rm -f "$SD/s-by.session" "$SD/s-run.session" "$SD/s-pid.session" "$SD/s-cpid.session" "$SD/s-dpid.session"
+
 if [ "$CARRIER" = local ]; then
-  R=$T/run/dot-ai SD=$T/state/dot-ai/sessions
-  rm -f "$SD"/*.session # the sessions of the tests above
-  send() { (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "$1") >/dev/null; }
-  pushes() { grep -c '"method":"notifications/claude/channel"' "$T/chan.out"; }
-  within() { i=0; while [ $i -lt 8 ]; do eval "$1" && return 0; sleep 1; i=$((i + 1)); done; return 1; }
-  state() { sed -n 's/^state=//p' "$SD/$1.session" 2>/dev/null; }
-  field() { sed -n "s/^$2=//p" "$SD/$1.session" 2>/dev/null; }
-
-  # The hooks keep each session's record
-  hook session-start s-chan "$P/alpha" claude >/dev/null 2>&1
-  check "record: a session's start makes it, idle" '[ "$(state s-chan)" = idle ] && [ "$(field s-chan root)" = "$(cd "$P/alpha" && pwd -P)" ] && [ "$(field s-chan agent)" = claude ] && [ "$(field s-chan id)" = s-chan ]'
-  check "record: in the person's state directory, private to them" '[ "$(ls -ld "$SD" | cut -c1-10)" = drwx------ ]'
-  check "record: its runner, without DOT_AI_BY or ai.runner, dot-ai" '[ "$(field s-chan by)" = dot-ai ]'
-  hook prompt s-chan "$P/alpha" claude >/dev/null 2>&1
-  check "record: a prompt makes it busy" '[ "$(state s-chan)" = busy ]'
-  hook stop s-chan "$P/alpha" claude >/dev/null 2>&1
-  check "record: a Stop that lets the turn end makes it idle" '[ "$(state s-chan)" = idle ]'
-  printf '{"session_id":"s-cmp","cwd":"%s","source":"compact"}' "$P/alpha" | carry_hook session-start --agent claude >/dev/null 2>&1
-  check "record: a start from compacting, maybe mid-turn, is busy" '[ "$(state s-cmp)" = busy ]'
-  hook session-end s-cmp "$P/alpha" claude >/dev/null 2>&1
-  check "record: a session's end marks it ended" '[ "$(state s-cmp)" = ended ]'
-  (DOT_AI_BY=aix && export DOT_AI_BY && hook session-start s-by "$P/alpha" claude >/dev/null 2>&1)
-  check "record: its runner, DOT_AI_BY" '[ "$(field s-by by)" = aix ]'
-  hook prompt s-by "$P/alpha" claude >/dev/null 2>&1
-  check "record: its runner, kept from its start" '[ "$(field s-by by)" = aix ] && [ "$(state s-by)" = busy ]'
-  git config --file "$T/gitconfig" --add ai.runner tom
-  git config --file "$T/gitconfig" --add ai.runner aix
-  (DOT_AI_BY='../bin/x' && export DOT_AI_BY && hook session-start s-run "$P/alpha" codex >/dev/null 2>&1)
-  check "record: its runner, else ai.runner's first, never a path" '[ "$(field s-run by)" = tom ] && [ -z "$(field s-run pid)" ]'
-  git config --file "$T/gitconfig" --unset-all ai.runner
-  # Claude Code's process, as the record's pid: a shell named claude
-  cp "$(command -v sh)" "$T/fake/claude"
-  printf '{"session_id":"s-pid","cwd":"%s"}' "$P/alpha" >"$T/pid.json"
-  "$T/fake/claude" -c 'printf "%s\n" "$$" >"$1/pid"; $2 "$3" hook session-start --agent claude <"$1/pid.json" >/dev/null 2>&1; :' claude "$T" "$SH" "$M"
-  check "record: Claude Code's process, as pid" '[ -n "$(field s-pid pid)" ] && [ "$(field s-pid pid)" = "$(cat "$T/pid")" ]'
-  rm -f "$SD/s-by.session" "$SD/s-run.session" "$SD/s-pid.session"
-
   # A session of Claude Code's started with this plugin's channel, which
   # runs as its child, as Claude Code runs it
   mkfifo "$T/chan.in"
@@ -449,63 +458,93 @@ if [ "$CARRIER" = local ]; then
     sleep 2) | CLAUDE_CODE_SESSION_ID=s-plain CLAUDE_PROJECT_DIR=$P/alpha sh -c "$SH \"$M\" channel; :" claude)
   check "channel: not where the session wasn't started with it" '[ -z "$out" ] && [ ! -e "$R/s-plain.pipe" ]'
 
-  # Telling through a session's runner, `<by> tell <id>`, with a stand-in
-  # runner that exits as $T/aix.status says
-  printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>"%s/aix.calls"\nexit "$(cat "%s/aix.status")"\n' "$T" "$T" >"$T/fake/aix"
-  chmod +x "$T/fake/aix"
-  rm -f "$SD"/*.session
-  : >"$T/codex.calls"
-  : >"$T/aix.calls"
-  arec() { # KEY BY AGENT [PID]
-    { printf 'root=%s\nagent=%s\nid=%s\nby=%s\n' "$(cd "$P/alpha" && pwd -P)" "$3" "$1" "$2"
-      [ -z "${4:-}" ] || printf 'pid=%s\n' "$4"
-      printf 'state=idle\n'; } >"$SD/$1.session"
-  }
-  arec r-old dot-ai codex
-  touch -t 202601010000 "$SD/r-old.session"
-  arec r-aix aix claude
-  printf '0\n' >"$T/aix.status"
-  send "runner one"
-  check "runner: one the person doesn't allow isn't run; the next newest is told" '[ ! -s "$T/aix.calls" ] && within "[ -s \"$T/codex.calls\" ]" && grep -q "^queue --thread r-old " "$T/codex.calls"'
-  git config --file "$T/gitconfig" ai.runner aix
-  arec r-old dot-ai codex
-  touch -t 202601010000 "$SD/r-old.session"
-  : >"$T/codex.calls"
-  send "runner two"
-  check "runner: an allowed one is run, its session told" '[ "$(cat "$T/aix.calls")" = "tell r-aix" ] && sleep 1 && [ ! -s "$T/codex.calls" ]'
-  printf '4\n' >"$T/aix.status"
-  send "runner three"
-  check "runner: 4, it can't push: nothing more" '[ "$(wc -l <"$T/aix.calls" | tr -d " ")" = 2 ] && sleep 1 && [ ! -s "$T/codex.calls" ]'
-  printf '3\n' >"$T/aix.status"
-  send "runner four"
-  check "runner: 3, not open: the next newest" 'within "[ -s \"$T/codex.calls\" ]" && grep -q "^queue --thread r-old " "$T/codex.calls"'
-  printf '7\n' >"$T/aix.status"
-  arec r-old dot-ai codex
-  touch -t 202601010000 "$SD/r-old.session"
-  : >"$T/codex.calls"
-  out=$( (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "runner five"); printf 'status %s\n' $?)
-  check "runner: one that fails is said, but the mail went" 'printf "%s\n" "$out" | grep -q "^not told: .*aix tell r-aix exited 7" && printf "%s\n" "$out" | grep -qx "status 0" && sleep 1 && [ ! -s "$T/codex.calls" ]'
-  printf 'Hi.\n' >"$P/beta/.ai/mail/outbox/20261111-120000Z-@alpha--runner-stop.md"
-  check "runner: its failure, told by the Stop that delivered" 'hook stop b-run "$P/beta" claude 2>&1 | grep -q "^dot-ai: not told: .*aix tell r-aix exited 7"'
-  git config --file "$T/gitconfig" --unset-all ai.runner
-  # A session whose harness's process is gone is taken as ended
-  sh -c ':' &
-  gone=$!
-  wait "$gone"
-  rm -f "$SD"/*.session
-  arec r-old dot-ai codex
-  touch -t 202601010000 "$SD/r-old.session"
-  arec r-dead dot-ai claude "$gone"
-  : >"$T/codex.calls"
-  send "runner six"
-  check "runner: a session whose process is gone, taken as ended" 'within "[ -s \"$T/codex.calls\" ]" && grep -q "^queue --thread r-old " "$T/codex.calls"'
-  check "tell: dot-ai's, for a session not open, 3, and marks it ended" '$SH "$M" tell r-dead; [ $? -eq 3 ] && [ "$(state r-dead)" = ended ]'
-  check "tell: dot-ai's, for a session it has no record of, 3" '$SH "$M" tell r-none; [ $? -eq 3 ]'
-  check "tell: dot-ai's, for a busy session, 0" '$SH "$M" tell r-old; [ $? -eq 0 ]'
-  arec r-plain dot-ai claude
-  check "tell: dot-ai's, for an idle one it can't push to, 4" '$SH "$M" tell r-plain; [ $? -eq 4 ]'
-  rm -f "$SD"/*.session
 fi
+
+# Telling a project's newest session through its runner (both carriers)
+# Telling through a session's runner, `<by> tell <id>`, with a stand-in
+# runner, off PATH, that exits as $T/aix.status.<id> or $T/aix.status
+# says, registered in runners/ as it would be
+mkdir -p "$T/runner-bin"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>"%s/aix.calls"\nexit "$(cat "%s/aix.status.$2" 2>/dev/null || cat "%s/aix.status")"\n' "$T" "$T" "$T" >"$T/runner-bin/aix"
+chmod 755 "$T/runner-bin/aix"
+RG=$T/state/dot-ai/runners
+calls() { wc -l <"$T/aix.calls" | tr -d ' '; }
+rm -f "$SD"/*.session
+: >"$T/codex.calls"
+: >"$T/aix.calls"
+arec() { # KEY BY AGENT [PID]
+  { printf 'root=%s\nagent=%s\nid=%s\nby=%s\n' "$(cd "$P/alpha" && pwd -P)" "$3" "$1" "$2"
+    [ -z "${4:-}" ] || printf 'pid=%s\n' "$4"
+    printf 'state=idle\n'; } >"$SD/$1.session"
+}
+arec r-old aix codex
+touch -t 202601010000 "$SD/r-old.session"
+arec r-aix aix claude
+printf '0\n' >"$T/aix.status"
+send "runner one"
+check "runner: one that hasn't registered isn't run, nor anyone else told" '[ ! -s "$T/aix.calls" ] && sleep 1 && [ ! -s "$T/codex.calls" ]'
+mkdir -p "$RG" && chmod 700 "$RG"
+printf '%s\n' "$T/runner-bin/aix" >"$RG/aix" && chmod 600 "$RG/aix"
+send "runner two"
+check "runner: a registered one is run, by its path, its session told" '[ "$(cat "$T/aix.calls")" = "tell r-aix" ] && sleep 1 && [ ! -s "$T/codex.calls" ]'
+chmod 620 "$RG/aix"
+send "runner bad one"
+chmod 600 "$RG/aix"
+check "runner: a registration others can write, skipped" '[ "$(calls)" = 1 ] && [ ! -s "$T/codex.calls" ]'
+chmod 770 "$RG"
+send "runner bad two"
+chmod 700 "$RG"
+check "runner: a runners folder others can write, skipped" '[ "$(calls)" = 1 ] && [ ! -s "$T/codex.calls" ]'
+chmod 757 "$T/runner-bin/aix"
+send "runner bad three"
+chmod 755 "$T/runner-bin/aix"
+check "runner: a program others can write, skipped" '[ "$(calls)" = 1 ] && [ ! -s "$T/codex.calls" ]'
+ln -s "$T/runner-bin/aix" "$T/runner-bin/aix-link"
+printf '%s\n' "$T/runner-bin/aix-link" >"$RG/aix"
+send "runner linked"
+check "runner: a program reached by a link, checked at its target" '[ "$(calls)" = 2 ]'
+: >"$T/aix.calls" && printf 'tell r-aix\n' >"$T/aix.calls"
+printf 'runner-bin/aix\n' >"$RG/aix"
+send "runner bad four"
+printf '%s\n' "$T/runner-bin/aix" >"$RG/aix"
+check "runner: a path that isn't absolute, skipped" '[ "$(calls)" = 1 ] && [ ! -s "$T/codex.calls" ]'
+printf '4\n' >"$T/aix.status"
+send "runner three"
+check "runner: 4, it can't push: nothing more" '[ "$(calls)" = 2 ] && sleep 1 && [ ! -s "$T/codex.calls" ]'
+printf '3\n' >"$T/aix.status.r-aix"
+send "runner four"
+rm -f "$T/aix.status.r-aix"
+check "runner: 3, not open: the next newest" '[ "$(calls)" = 4 ] && [ "$(tail -n 1 "$T/aix.calls")" = "tell r-old" ]'
+printf '7\n' >"$T/aix.status"
+arec r-old aix codex
+touch -t 202601010000 "$SD/r-old.session"
+: >"$T/codex.calls"
+out=$( (cd "$P/beta" && printf 'Hi.\n' | dotai send @alpha "runner five"); printf 'status %s\n' $?)
+check "runner: one that fails is said, but the mail went" 'printf "%s\n" "$out" | grep -q "^not told: .*aix tell r-aix exited 7" && printf "%s\n" "$out" | grep -qx "status 0" && sleep 1 && [ ! -s "$T/codex.calls" ]'
+printf 'Hi.\n' >"$P/beta/.ai/mail/outbox/20261111-120000Z-@alpha--runner-stop.md"
+check "runner: its failure, told by the Stop that delivered" 'hook stop b-run "$P/beta" claude 2>&1 | grep -q "^[A-Za-z-]*: not told: .*aix tell r-aix exited 7"'
+# A session whose harness's process is gone is taken as ended
+sh -c ':' &
+gone=$!
+wait "$gone"
+rm -f "$SD"/*.session
+arec r-old aix codex
+touch -t 202601010000 "$SD/r-old.session"
+arec r-dead aix claude "$gone"
+printf '0\n' >"$T/aix.status"
+: >"$T/aix.calls"
+send "runner six"
+check "runner: a session whose process is gone, taken as ended" '[ "$(cat "$T/aix.calls")" = "tell r-old" ]'
+# The carrier's own tell, for the sessions whose runner it is: dot-ai's
+# pushes where it can, Arcana's never
+arec r-dead "$OWN" claude "$gone"
+arec r-plain "$OWN" claude
+arec r-busy "$OWN" codex && sed 's/^state=idle$/state=busy/' "$SD/r-busy.session" >"$T/busy" && mv "$T/busy" "$SD/r-busy.session"
+check "tell: the carrier's, for a session not open, 3, and marks it ended" '$HOOKER tell r-dead; [ $? -eq 3 ] && [ "$(state r-dead)" = ended ]'
+check "tell: the carrier's, for a session it has no record of, 3" '$HOOKER tell r-none; [ $? -eq 3 ]'
+check "tell: the carrier's, for a busy session, 0" '$HOOKER tell r-busy; [ $? -eq 0 ]'
+check "tell: the carrier's, for an idle one it can't push to, 4" '$HOOKER tell r-plain; [ $? -eq 4 ]'
+rm -f "$SD"/*.session
 
 # Another carrier: Arcana stays out of mail under dot-ai's; dot-ai hands
 # the carrier's work to Arcana's, and refuses one it doesn't know
@@ -528,17 +567,15 @@ check "carrier: the hooks are quiet" 'hook stop a9 "$P/alpha" claude 2>/dev/null
 git config --file "$T/gitconfig" ai.carrier $CARRIER
 
 # The person's settings come from their own git config, never a
-# repository's (dot-ai's own; Arcana's to follow)
-if [ "$CARRIER" = local ]; then
-  git -C "$P/alpha" init -q
-  git -C "$P/alpha" config ai.carrier pigeon
-  check "settings: a repository's ai.carrier is ignored" '(cd "$P/alpha" && carry deliver 2>&1) | grep -q "^delivered: 20261015-230000Z-@beta--carried.md" && [ ! -f "$A/outbox/20261015-230000Z-@beta--carried.md" ]'
-  check "settings: and warned of, naming the repository" '(cd "$P/alpha" && carry check 2>&1 >/dev/null) | grep -q "^dot-ai: $(cd "$P/alpha" && pwd -P) sets ai.carrier in its own git config, which is ignored"'
-  check "settings: warned of once at a session's start" 'hook session-start a10 "$P/alpha" claude | grep -q "sets ai.carrier in its own git config" && hook stop a10 "$P/alpha" claude 2>/dev/null'
-  git -C "$P/alpha" config ai.path "$T/nowhere"
-  check "settings: a repository's ai.path is ignored" '[ "$(cd "$P/alpha" && carry find beta 2>/dev/null)" = "$P/beta" ]'
-  rm -rf "$P/alpha/.git"
-fi
+# repository's
+git -C "$P/alpha" init -q
+git -C "$P/alpha" config ai.carrier pigeon
+check "settings: a repository's ai.carrier is ignored" '(cd "$P/alpha" && carry deliver 2>&1) | grep -q "^delivered: 20261015-230000Z-@beta--carried.md" && [ ! -f "$A/outbox/20261015-230000Z-@beta--carried.md" ]'
+check "settings: and warned of, naming the repository" '(cd "$P/alpha" && carry check 2>&1 >/dev/null) | grep -q "^[a-z -]*: $(cd "$P/alpha" && pwd -P) sets ai.carrier in its own git config, which is ignored"'
+check "settings: warned of once at a session's start" 'hook session-start a10 "$P/alpha" claude | grep -q "sets ai.carrier in its own git config" && hook stop a10 "$P/alpha" claude 2>/dev/null'
+git -C "$P/alpha" config ai.path "$T/nowhere"
+check "settings: a repository's ai.path is ignored" '[ "$(cd "$P/alpha" && carry find beta 2>/dev/null)" = "$P/beta" ]'
+rm -rf "$P/alpha/.git"
 
 [ "$failed" = 0 ] && printf 'all passed\n'
 exit "$failed"

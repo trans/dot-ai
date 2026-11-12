@@ -1,6 +1,6 @@
 # dot-ai's mail commands (once dot-ai-mail)
 
-*Draft, 2026-10-14; updated 2026-11-11. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
+*Draft, 2026-10-14; updated 2026-11-12. Built 2026-10-15: `skills/dot-ai/scripts/dot-ai-mail`
 0.1.0; 0.2.0 (2026-10-17) adds `Re:` and `Id:`; 0.3.0 (2026-10-27) adds
 topics, `ai.carrier` and receipts; 0.3.1 (2026-10-29) leaves a message it
 can't write from a sandbox for the hooks, saying so. 0.5.0 (2026-10-30,
@@ -27,7 +27,11 @@ repository that sets them; any carrier by name; `mail receipts`; session
 records in `$XDG_STATE_HOME/dot-ai/sessions/` with `by` and `pid`, ended
 rather than dropped; and delivery telling through each session's runner
 (`<by> tell <id>`), with `dot-ai tell` for its own (below, Telling an idle
-session). Tested by
+session). 0.10.0 (2026-11-12) follows Draft 0.5 (agreed by `@tom`,
+`@aix` and `@arcana`; `c90cc8f`): no `ai.runner` and no default runner;
+runners register under `runners/`, and delivery runs the registered
+path; Codex's `pid` under `codex --no-daemon`.
+Tested by
 `tests/dot-ai.sh` (`just test`); its hooks ship in the dot-ai plugin
 (`hooks/hooks.json`).*
 
@@ -118,8 +122,10 @@ seconds).
 - **The record** (the spec's Session records, since 0.9.0): the hooks
   keep one for each session in `$XDG_STATE_HOME/dot-ai/sessions/`
   (`<key>.session`): its project, agent, id, runner (`by`: `DOT_AI_BY`,
-  else `ai.runner`'s first, else `dot-ai`), Claude Code's process (`pid`,
-  the nearest `claude` within three processes above the hook), and
+  else `dot-ai`; 0.9.0 took `ai.runner`'s first before `dot-ai`), the
+  harness's process (`pid`: the nearest `claude`, or `codex` under
+  `--no-daemon` but never `codex app-server`, within three processes
+  above the hook), and
   state. A prompt makes it busy; a Stop that lets the turn end, idle; a
   session's start, idle (busy if it started from compacting, which may be
   mid-turn); its end, ended. `by` and `pid` are found at the start and
@@ -131,12 +137,20 @@ seconds).
   there too, and dropped at the end.
 - **Delivery tells one session:** after a run, for each project mail
   reached, `tell_session` takes the project's newest open record (not
-  ended, its `pid` there) whose runner the person allows (`ai.runner`'s,
-  and `dot-ai`) and runs `<by> tell <id>`, given up after 10 seconds:
-  0 or 4 stops there, 3 tries the next newest, anything else stops with
-  a `not told:` line (the mail went all the same, so `send` still
-  succeeds; the hooks pass the line on). So two sessions never both
-  answer one message.
+  ended, its `pid` there). `by=dot-ai` it tells itself (`dot-ai tell`,
+  below); any other runner it runs as `<path> tell <id>`, the path its
+  registration in `$XDG_STATE_HOME/dot-ai/runners/<by>` holds, given up
+  after 10 seconds: 0 or 4 stops there, 3 tries the next newest, anything
+  else stops with a `not told:` line (the mail went all the same, so
+  `send` still succeeds; the hooks pass the line on). So two sessions
+  never both answer one message.
+- **A registration** is used only if the folder, the file and the program
+  are the person's (the program may be root's) and no one else can write
+  them (`find -perm`), and it holds an absolute path to an executable.
+  One that fails, or a runner with none, counts as 4: the session is left
+  for its Stop, and no older one is told instead, since that would have
+  two answer. 0.9.0 instead allowed the runners `ai.runner` listed and
+  ran them by name on PATH, which failed for a runner off PATH.
 - **`dot-ai tell`**, for sessions whose runner is dot-ai: 3 if the record
   is missing or not open (marking it ended), 0 if the session is busy (its
   Stop tells it), and for an idle one the push below, 0, or 4 where it

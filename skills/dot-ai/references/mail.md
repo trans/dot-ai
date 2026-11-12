@@ -91,7 +91,7 @@ the user the reason.
 | error: NAME went to @x, but couldn't be filed under .ai/mail/sent/ | It went: don't send it again. Tell the user. |
 | ai.carrier is X, which isn't a carrier's name | Tell the user: `git config --global ai.carrier` should be a carrier's name (`local`, `arcana`). |
 | this person's carrier is X (git config ai.carrier), but there's no X command | Tell the user: X isn't installed here, or `ai.carrier` is wrong. |
-| DIR sets ai.carrier (or ai.path, ai.runner) in its own git config, which is ignored | Tell the user: these are the person's settings, read from their own git config only (`--global`, else `--system`); the repository's copy can go (`git -C DIR config --unset-all ai.carrier`). |
+| DIR sets ai.carrier (or ai.path) in its own git config, which is ignored | Tell the user: these are the person's settings, read from their own git config only (`--global`, else `--system`); the repository's copy can go (`git -C DIR config --unset-all ai.carrier`). |
 | not told: DIR's newest session, since X tell ID exited N | The mail went: don't send it again. That session's runner, X, couldn't tell it, so it hears at its next start or Stop. If it keeps happening, tell the user. |
 
 ### Delivering by hand
