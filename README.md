@@ -1,6 +1,11 @@
 # dot-ai
 
-*Draft 0.4, 2026-11-11*. 0.4: carriers and runners. The carriers are
+*Draft 0.5, 2026-11-12*. 0.5: no default runner, so a session started
+without `DOT_AI_BY` is the carrier's; runners register themselves under
+`runners/` in the state folder, with their program's absolute path, and
+the carrier runs that path, in place of git config's `ai.runner`, which
+goes; a runner starts Codex as `codex --no-daemon`, whose hooks see its
+environment. 0.4: carriers and runners. The carriers are
 `local` (the reference) and `arcana`, each answering the carrier's
 commands; a carrier moves mail, and a session's runner (aix, T.O.M., or
 the harness with the carrier's hooks) tells it, through session records

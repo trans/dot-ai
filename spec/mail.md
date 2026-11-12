@@ -474,22 +474,43 @@ sessions.
   it as the record's `by` (Session records, below), still tell the session
   at its start and Stop, and leave pushing, waking and resuming it to the
   runner. A person who starts sessions through a launcher of their own (a
-  shell function, say) can set it there. A session started without it
-  gets the person's default runner, the first of git config's `ai.runner`
-  (below), or, without one, the hooks' own carrier (`dot-ai`, `arcana`).
-  That default is how a harness whose hooks no launcher reaches (Codex's,
-  which run in its app server) still gets a runner.
-- **Which runners may run.** Runners are named like carriers: lowercase
-  letters, digits and hyphens. git config's `ai.runner`, read like
-  `ai.carrier` (from the person's own config only, see
-  [Config](config.md)), lists the ones the person allows, a value each;
-  the first is the default above. The carrier runs only those, and itself:
-  a record naming anything else is left alone, so a stray record can't
-  make it run some other program.
+  shell function, say) can set it there. Runners are named like carriers:
+  lowercase letters, digits and hyphens.
+- **No default runner.** A session started without `DOT_AI_BY` is the
+  hooks' own carrier's (`by=dot-ai`, `by=arcana`), whatever else is
+  installed: a default would credit some runner with sessions it never
+  started. So a session the person opens by hand isn't pushed to; it
+  hears of mail at its next start or Stop.
+- **Codex** runs its hooks in its app server. A plain `codex` shares one
+  app server per person, whose environment isn't the session's, so its
+  hooks never see `DOT_AI_BY`. Started as `codex --no-daemon`, it runs
+  the app server in its own process, and the hooks see the environment
+  it was started with. A runner that starts Codex starts it that way; a
+  Codex session opened as a plain `codex` is the carrier's, launcher or
+  not.
+- **Inherited further.** A session started from inside another (a
+  `claude -p` run in a runner's session, say) inherits `DOT_AI_BY` too,
+  so its record names a runner that doesn't hold it. Asked to tell such a
+  session while it's open, the runner answers 4, not 3.
+- **Registering.** A runner registers itself each time it starts a
+  session: `$XDG_STATE_HOME/dot-ai/runners/<name>`
+  (`~/.local/state/dot-ai/runners/` where it's unset), one line, the
+  absolute path of its program, written under a hidden name and renamed
+  into place; the last to write wins. The folder is private to the person
+  (mode 700), like `sessions/` (Session records, below). The carrier runs
+  a runner only through its registration, and only when the folder and
+  the file are the person's and nobody else can write them, the line is
+  an absolute path to an executable, and that program is the person's (or
+  root's) and nobody else can write it. It never looks up its own name
+  there: those sessions it tells itself. So a stray record can't make it
+  run some other program, and a runner that isn't on `PATH` is still
+  reached. To stop a runner being run, delete its registration and stop
+  using that runner, since it registers again at each start.
 - **Telling.** When the carrier has put mail in a project's inbox, it
-  tells the project's newest open session by running `<by> tell <id>`,
-  with the record's `by` and `id`, if that runner is allowed. The runner
-  exits:
+  tells the project's newest open session, with the record's `id`: one
+  marked with its own name, itself; any other by running
+  `<path> tell <id>`, the path from the registration of the record's
+  `by`. The runner exits:
 
   | Status | Means | The carrier |
   |---|---|---|
@@ -498,7 +519,10 @@ sessions.
   | 4 | The runner can't push to it | stops; the session hears at its next start or Stop |
   | other | It failed | stops, and says so |
 
-  The reference doesn't push, so `dot-ai tell` always exits 4 (or 3).
+  A record whose runner has no registration, or one that fails the
+  checks above, counts as 4: the carrier stops, and doesn't tell an older
+  session instead, which would have two answer the same mail. The
+  reference doesn't push, so `dot-ai tell` always exits 4 (or 3).
 - **Extras.** Pushing to an idle session (one waiting for its user)
   instead of at its next start or Stop, as with Claude Code's channels or
   `codex queue`, and **waking** a project with no session open, by
@@ -527,8 +551,8 @@ program writes them, so each can read the others'.
 | `root` | The project's directory, with symbolic links resolved |
 | `agent` | The harness: `claude`, `codex`, `copious`, … |
 | `id` | The harness's own id for the session, which resumes it |
-| `by` | The session's runner (Runners, above), run as `<by> tell`: `dot-ai`, `arcana`, `aix`, `tom`, … Lowercase letters, digits and hyphens only |
-| `pid` | The harness's process, where there is one (Claude Code's), optional |
+| `by` | The session's runner (Runners, above), told through its registration, or the carrier itself: `dot-ai`, `arcana`, `aix`, `tom`, … Lowercase letters, digits and hyphens only |
+| `pid` | The harness's process, where there is one (Claude Code's; Codex's under `--no-daemon`), optional |
 | `state` | `idle` (waiting for its user), `busy` (in a turn) or `ended` |
 
 - **A project's newest session** is the one whose record changed last

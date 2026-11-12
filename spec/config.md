@@ -53,12 +53,10 @@ here: the machine's name (`ai.machine`, see [Identity](identity.md)), where
 to look for projects (`ai.path`) and what carries their mail
 (`ai.carrier`, see [Mail](mail.md)), and the person's own name and email.
 
-`ai.runner` (multi-valued) names the runners the person allows, the
-first being the runner for sessions started without one (see
-[Mail](mail.md), Runners).
+Which runners the carrier tells isn't a setting: each registers itself,
+with its program's path (see [Mail](mail.md), Runners).
 
-Read `ai.path`, `ai.carrier` and `ai.runner` from the person's own git
-config only:
+Read `ai.path` and `ai.carrier` from the person's own git config only:
 `git config --global` (which takes in `$XDG_CONFIG_HOME/git/config` as
 well), or `git config --system` where that sets none. Never from a
 repository's own config, which a plain `git config --get` lets win: one
